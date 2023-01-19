@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm[toml]"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scheduleopt"
+description = "Production scheduling optiization tool."
+# readme = "README.rst"
+requires-python = ">=3.8"
+dependencies = [
+    "ortools>=9.4.1874",
+    "pandas>=1.4.2",
+    "altair>=4.2.0",
+    "altair_saver>=0.5.0",
+    'importlib-metadata; python_version<"3.8"',
+]
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+root='..'
+relative_to="__file__"
