@@ -6,6 +6,7 @@ code_configuration:
   scoring_script: run_simulation.py
 environment:
   build:
-    path: envs
+    path: ../..
+    dockerfile_path: envs/Dockerfile
 instance_type: Standard_DS3_v2
 instance_count: 1

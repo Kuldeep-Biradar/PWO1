@@ -34,7 +34,7 @@ class ScheduleSolution:
         self._process_solution()
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             self.machine_stats = self._calculate_machine_stats()
-            # self.job_data = self._aggregate_job_data()
+            self.job_data = self._aggregate_job_data()
             self._create_time_series()
 
     def _process_solution(
