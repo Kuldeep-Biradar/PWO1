@@ -1,0 +1,57 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License.
+
+variables:
+  - name: ado_service_connection_aml_ws
+    value: svc-ml-eds-nus-dev-01 
+  - name: resource_group
+    value: RG-ML-NCUS-Dev
+  - name: aml_workspace
+    value: azgscamlws01
+  - name: location
+    value: useast2
+
+trigger:
+- none
+
+pool:
+  name: AMLVirtual
+
+stages:
+- stage: CreateFeatureData 
+  displayName: Create Feature Data
+  jobs:      
+    - job: DataProcessing
+      steps:
+      - task: Bash@3
+        displayName: Install AZ CLI
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -e # fail on error
+            sudo apt install -y python3-pip
+            sudo apt install curl -y
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+            sudo apt-get update
+            sudo apt-get install azure-cli
+      - task: AzureCLI@2
+        displayName: Install AML CLI
+        inputs:
+          azureSubscription: $(ado_service_connection_aml_ws)
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: code/
+          inlineScript: |
+            set -e # fail on error
+            az version
+            az extension add -n ml -y
+            az configure --defaults group=$(resource_group) workspace=$(aml_workspace) location=$(location)
+      - task: AzureCLI@2
+        displayName: Submit pipeline
+        inputs:
+          azureSubscription: $(ado_service_connection_aml_ws)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            az ml online-endpoint create -f mlops/endpoint/model-endpoint
+            az ml online-deployment -f mlops/endpoint/model-deployment.yml --all-traffic
