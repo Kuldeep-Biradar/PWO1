@@ -53,5 +53,5 @@ stages:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
-            az ml online-endpoint create -f mlops/endpoint/model-endpoint
+            az ml online-endpoint create -f mlops/endpoint/model-endpoint.yml
             az ml online-deployment -f mlops/endpoint/model-deployment.yml --all-traffic
