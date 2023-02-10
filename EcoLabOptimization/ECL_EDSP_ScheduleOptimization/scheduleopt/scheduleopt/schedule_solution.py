@@ -2,6 +2,7 @@ import collections
 from datetime import datetime
 from typing import List
 from copy import deepcopy
+import json
 
 from ortools.sat.python import cp_model
 
@@ -217,17 +218,24 @@ class ScheduleSolution:
         for idx, row in job_schedule.iterrows():
             if isinstance(row["TaskId"], str):
                 continue
-            consume = self.input_data.consumption.get(row["MIN"], {})
-            if name_to_id.get(row["Machine"]) in consume:
+            consume = self.input_data.consumption.get(row["MIN"], {})\
+                .get(name_to_id.get(row["Machine"]), {})\
+                .get(str(row["TaskId"]))
+                
+            if consume:
                 machine_consume = consume.get(name_to_id[row["Machine"]])
                 for i in range(row["Start"], row["End"]):
-                    for k, v in machine_consume.items():
+                    for task_k, task_v in consume.items():
                         consumption_events.append(
-                            {"MIN": k, "Production": -v / 60, "Time": i}
+                            {"MIN": task_k, "Production": -task_v, "Time": i}
                         )
         consumption_events = pd.DataFrame(consumption_events)
 
         production = pd.concat([production_jobs, consumption_events])
+
+        # Check for initial amounts
+        for min_id, amount in self.input_data.initial_amounts.items():
+            production = production.append(pd.Series({"MIN": min_id, "Time": 0, "Production": amount}), ignore_index=True)
 
         production = pd.pivot_table(
             production, values="Production", index="Time", columns="MIN", aggfunc=np.sum
@@ -310,6 +318,15 @@ class ScheduleSolution:
         all_data["Utilization"] = all_data["Running"] / all_data["Total"]
 
         return all_data
+    
+    def to_json(self):
+        output = {
+            "summary": self.solution_summary,
+            "schedule": self.job_schedule.to_csv(),
+            "production": self.production.to_csv(),
+            "cumulative_production": self.cumsum_production.to_csv(),
+        }
+        return json.dumps(output)
 
     def visualize_jobs(self, start_time: datetime = None):
         return self._visualize("jobs", start_time)

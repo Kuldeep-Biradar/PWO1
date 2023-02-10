@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import reduce
 from multiprocessing import cpu_count
+from importlib.resources import files
 
 from ortools.sat.python import cp_model
 
@@ -45,6 +46,7 @@ class Job:
     due_date: Optional[List[int]] = None
     production_jobs: Optional["Job"] = None
     last_consumed: Optional[int] = 0
+    total_consumed: Optional[int] = 0
 
 
 class ScheduleModel:
@@ -53,22 +55,30 @@ class ScheduleModel:
         input_data: Union[dict, ModelData, str, Path],
         cleaning_matrix: Optional[Dict[int, Union[pd.DataFrame, str, Path]]] = None,
     ):
-        if cleaning_matrix is not None:
-            self._process_cleaning_matrix(cleaning_matrix)
-        else:
-            self._cleaning_matrix = {}
+        self._process_cleaning_matrix(cleaning_matrix)
         self._load_input_data(input_data)
         self._initialize_inputs()
 
     def _process_cleaning_matrix(
-        self, cleaning_matrix: Dict[int, Union[pd.DataFrame, str, Path]]
+        self, cleaning_matrix: Dict[int, Union[pd.DataFrame, str, Path]] = None
     ):
+        """Process cleaning matrix into nested diction with structure of
+           {CurrentMIN -> {NextMIN -> CleaningProcess}}.
+
+        Args:
+            cleaning_matrix (Dict[int, Union[pd.DataFrame, str, Path]], optional): _description_. Defaults to None.
+        """
         output_matrix = {}
+        if cleaning_matrix is None:
+            r358 = files("scheduleopt.data").joinpath("r358-cleaning-matrix.csv")
+            r368 = files("scheduleopt.data").joinpath("r368-cleaning-matrix.csv")
+            cleaning_matrix = {0: r358, 5: r368}
+
         for k, v in cleaning_matrix.items():
             if isinstance(v, (str, Path)):
-                data = pd.read_csv(v, index_col=0, header=0).to_dict()
+                data = pd.read_csv(v, index_col=0, header=0).to_dict("index")
             else:
-                data = v.to_dict()
+                data = v.to_dict("index")
             output_matrix[k] = data
         self._cleaning_matrix = output_matrix
 
@@ -102,10 +112,13 @@ class ScheduleModel:
 
         consumption = {}
         for min_id, consume in self._input_data.consumption.items():
-            for machine_id, v in consume.items():
-                consumption[(min_id, int(machine_id))] = {
-                    k2: v2 / time_scale_factor for k2, v2 in v.items()
-                }
+            for machine_id, task_values in consume.items():
+                for task_id, v in task_values.items():
+                    consumption[(min_id, int(machine_id), int(task_id))] = {
+                        # consumption comes in lbs/min
+                        k2: v2
+                        for k2, v2 in v.items()
+                    }
         self._consumption = consumption
 
         self._max_consumption = (
@@ -114,11 +127,7 @@ class ScheduleModel:
             else self._input_data.max_consumption
         )
 
-        self._max_consumption = {
-            k: v / time_scale_factor for k, v in self._max_consumption.items()
-        }
         self._scheduled_shutdown = self._input_data.scheduled_shutdown
-        self._changeover_operations = self._input_data.changeover_operations
 
         # convert all hours to minutes
         shutdowns = []
@@ -126,9 +135,16 @@ class ScheduleModel:
             shutdowns.append({k: v * time_scale_factor for k, v in shutdown.items()})
         self._scheduled_shutdown = shutdowns
 
+        changeover_operations = pd.read_csv(
+            files("scheduleopt.data").joinpath("cleaning-times.csv")
+        )
         self._changeover_operations = {
-            k: v * time_scale_factor for k, v in self._changeover_operations.items()
+            k: v for k, v in changeover_operations.to_dict("split")["data"]
         }
+
+        self._initial_amounts = self._input_data.initial_amounts
+        if self._initial_amounts is None:
+            self._initial_amounts = {}
 
         self._initial_amounts = self._input_data.initial_amounts
 
@@ -197,7 +213,7 @@ class ScheduleModel:
         if self._scheduled_shutdown is not None:
             for item in self._scheduled_shutdown:
                 horizon += item["duration"]
-        return horizon
+        return int(math.ceil(horizon)) * 4
 
     def _create_job_intervals(self, model, jobs_data, horizon, job_id_min=0):
         # Named tuple to store information about created variables.
@@ -223,6 +239,7 @@ class ScheduleModel:
         job_id = job_id_min
         for job in jobs_data:
             current_leftover = 0
+            job_consume_total = 0
             last_consumed = 0
             task_intervals = []
             job_consumptions = []
@@ -234,8 +251,8 @@ class ScheduleModel:
             for task_id, task in enumerate(job):
 
                 # Find min and max task length within alternative tasks
-                min_duration = task[0][0]
-                max_duration = task[0][0]
+                min_duration = math.ceil(task[0][0])
+                max_duration = math.ceil(task[0][0])
                 min_id = task[0][3]
 
                 num_alternatives = len(task)
@@ -277,7 +294,7 @@ class ScheduleModel:
                         alt_suffix = "_j%i_t%i_a%i" % (task_job_id, task_id, alt_id)
                         l_presence = model.NewBoolVar("presence" + alt_suffix)
                         l_start = model.NewIntVar(0, horizon, "start" + alt_suffix)
-                        l_duration = task[alt_id][0]
+                        l_duration = math.ceil(task[alt_id][0])
                         l_end = model.NewIntVar(0, horizon, "end" + alt_suffix)
                         l_interval = model.NewOptionalIntervalVar(
                             l_start,
@@ -355,7 +372,7 @@ class ScheduleModel:
                         b_job_is_used,
                         task[0][0],
                     )
-                task_consumption = self._consumption.get((min_id, machine_id))
+                task_consumption = self._consumption.get((min_id, machine_id, task_id))
 
                 ## TODO: Does not work with alt reactor tasks right now
                 if task_consumption:
@@ -363,6 +380,7 @@ class ScheduleModel:
                         # if current_leftover > consumption, no consumption needed
                         production_batch_size = self._batches.get(k)
                         task_consume_total = task_consume_rate * max_duration
+                        job_consume_total += task_consume_total
                         if task_consume_total > current_leftover:
                             job_id += 1
 
@@ -399,16 +417,19 @@ class ScheduleModel:
                                     )
 
                                 # Production job must finish before
-                                # model.Add(job.tasks[-1].end < start + prev_job_offset)
                                 model.Add(
-                                    job.tasks[-1].end > start + prev_job_offset - 12
-                                )
+                                    job.tasks[-1].end < (start + prev_job_offset)
+                                ).OnlyEnforceIf(job.is_present)
+                                # model.Add(job.tasks[-1].end < start)
+                                model.Add(
+                                    job.tasks[-1].end + 12 >= (start + prev_job_offset)
+                                ).OnlyEnforceIf(job.is_present)
                                 # add new consume duration
                                 prev_job_offset += production_consume_duration
                                 last_job = job
 
                             # Replace current_leftover with new leftover production
-                            current_leftover = (
+                            current_leftover += (
                                 production_total_batches * production_batch_size
                                 - task_consume_total
                             )
@@ -420,7 +441,7 @@ class ScheduleModel:
                     last_consumed = self._batches.get("LMAS") - current_leftover
 
                 task_interval.consumption = self._consumption.get(
-                    (min_id, machine_id), None
+                    (min_id, machine_id, task_id), None
                 )
                 task_intervals.append(task_interval)
 
@@ -433,6 +454,7 @@ class ScheduleModel:
                 b_job_is_used,
                 production_jobs=product_jobs,
                 last_consumed=last_consumed,
+                total_consumed=math.ceil(job_consume_total),
             )
             total_leftover += current_leftover
 
@@ -487,10 +509,12 @@ class ScheduleModel:
         self.excesses = []
 
         for n, job in enumerate(jobs):
+            total_other_consumed = 0
             if len(job.production_jobs) == 0:
                 continue
 
             for prod_job in job.production_jobs[:-1]:
+                # for prod_job in job.production_jobs:
                 # If job is used, prod_job must be present
                 model.AddImplication(job.is_present, prod_job.is_present)
 
@@ -525,8 +549,21 @@ class ScheduleModel:
                 model.Add(
                     last_other_prod_job.tasks[0].end >= job.tasks[0].start - 12
                 ).OnlyEnforceIf(last_prod_job_usable)
-                # model.Add(last_other_prod_job.start <= job.tasks[0].start - 12).OnlyEnforceIf(last_prod_job_usable.Not())
-                # model.Add(last_other_prod_job.start <= job.tasks[0].start - 12).OnlyEnforceIf(last_prod_job_usable.Not())
+                model.Add(
+                    last_other_prod_job.tasks[0].end <= job.tasks[0].start
+                ).OnlyEnforceIf(last_prod_job_usable)
+                last_prod_job_early = model.NewBoolVar(
+                    f"prod_job_before_j{other_job.job_id}_used_by_{job.job_id}"
+                )
+                model.Add(
+                    last_other_prod_job.tasks[0].end <= job.tasks[0].start - 12
+                ).OnlyEnforceIf(last_prod_job_early)
+                last_prod_job_late = model.NewBoolVar(
+                    f"prod_job_after_j{other_job.job_id}_used_by_{job.job_id}"
+                )
+                model.Add(
+                    last_other_prod_job.tasks[0].end > job.tasks[0].start
+                ).OnlyEnforceIf(last_prod_job_late)
 
                 job_after_and_lmas_usable = model.NewBoolVar(
                     f"j{job.job_id}_using_j{other_job.job_id}_excess"
@@ -534,6 +571,10 @@ class ScheduleModel:
                 model.Add(
                     sum([last_prod_job_usable, job_after_other_job]) == 2
                 ).OnlyEnforceIf(job_after_and_lmas_usable)
+
+                model.Add(
+                    sum([last_prod_job_early, last_prod_job_late]) == 1
+                ).OnlyEnforceIf(last_prod_job_usable.Not())
 
                 consumed = other_job.last_consumed
                 j_consumed = model.NewIntVar(
@@ -553,10 +594,11 @@ class ScheduleModel:
                     job_after_and_lmas_usable.Not()
                 )
                 consumed_amounts.append(j_consumed)
+                total_other_consumed += other_job.total_consumed
 
             consumed_amounts.append(self._initial_amounts.get("LMAS", 0))
 
-            max_amount = len(consumed_amounts) * int(self._batches.get("LMAS"))
+            max_amount = total_other_consumed
             excess = model.NewIntVar(
                 -max_amount, max_amount, f"excess_at_j{job.job_id}"
             )
@@ -648,6 +690,7 @@ class ScheduleModel:
 
                 # For pure consumption products that do not have forecasts
                 if min_id == "LMAS":
+                    continue
                     alt_suffix = (
                         f"_j{job_id}_t{task_id}_m{machine_id}_min{min_id}_recharge"
                     )
@@ -831,6 +874,7 @@ class ScheduleModel:
 
                 # For pure consumption products that do not have forecasts
                 if min_id == "LMAS":
+                    continue
                     alt_suffix = (
                         f"_j{job_id}_t{task_id}_m{machine_id}_min{min_id}_recharge"
                     )
@@ -1052,7 +1096,7 @@ class ScheduleModel:
         #         model.AddHint(task.start, solver.Value(task.start))
         #         model.AddHint(task.end, solver.Value(task.end))
 
-        solver.parameters.max_time_in_seconds = 6000
+        # solver.parameters.max_time_in_seconds = 6000
         status = solver.Solve(model, solution_printer)
 
         return ScheduleSolution(

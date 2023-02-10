@@ -16,12 +16,6 @@
     "initial_amounts": {
         "LMAS": 0
     },
-    "changeover_operations": {
-        "Rinse": 1,
-        "KOH Wash": 1,
-        "Boilout": 1,
-        "DI Rinse": 1
-    },
     "max_consumption": {
         "LMAS": 2
     },
@@ -150,6 +144,9 @@
         "B05Y5": [
             [[10, 5, "R368", "B05Y5"]],
             [[8, 1, "UF5", "B05Y5"], [8, 6, "UF7", "B05Y5"]]
+        ],
+        "LMAS": [
+
         ]
     },
     "forecast":[

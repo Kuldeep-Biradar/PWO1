@@ -6,16 +6,13 @@ import json
 import numpy as np
 
 
-with open("input.json") as f:
+with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
-r358_input_path = Path(".").parent.joinpath("r-358_cleaning_matrix.csv")
-r368_input_path = Path(".").parent.joinpath("r-368_cleaning_matrix.csv")
-cleaning_matrix = {0: r358_input_path, 5: r368_input_path}
 
-model = ScheduleModel(inputs, cleaning_matrix)
+model = ScheduleModel(inputs)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=1200)
-sol = model.solve_least_time_schedule()
+sol = model.solve_least_time_schedule(max_time_in_seconds=10)
 #%%
 prod = sol.cumsum_production.copy()
 prod.index = prod.index/60
@@ -24,6 +21,10 @@ fig = ax.get_figure()
 ax.set_ylabel("Quantity of LMAS")
 ax.set_xlabel("Hours")
 fig.savefig("outputs/lmas_noshutdown_noinitial.png")
+
+#%%
+        
+
 
 #%%
 min_jobs = [job for job in sol.jobs if job.min_id != "LMAS"]

@@ -8,10 +8,9 @@ class ModelData(BaseModel):
     jobs: Dict[str, List[List[List[Any]]]]
     forecast: List[List[Any]]
     batches: Dict[str, Union[float, int]]
-    consumption: Dict[str, Dict[str, Dict[str, int]]]
+    consumption: Dict[str, Dict[str, Dict[str, Dict[str, int]]]]
     max_consumption: Optional[Dict[str, int]]
-    changeover_operations: Optional[Dict[str, int]]
-    initial_amounts: Dict[str, int]
+    initial_amounts: Optional[Dict[str, int]]
     scheduled_shutdown: Optional[List[Dict[str, int]]]
     # due_dates: Optional[List[List[Any]]]
 
@@ -26,7 +25,7 @@ class ModelData(BaseModel):
                 for alt_task in task:
                     assert isinstance(alt_task, list)
                     assert len(alt_task) == 4
-                    assert isinstance(alt_task[0], int)
+                    assert isinstance(alt_task[0], (int, float))
                     assert isinstance(alt_task[1], int)
                     assert isinstance(alt_task[2], str)
                     assert isinstance(alt_task[3], str)
