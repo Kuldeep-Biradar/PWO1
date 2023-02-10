@@ -218,10 +218,12 @@ class ScheduleSolution:
         for idx, row in job_schedule.iterrows():
             if isinstance(row["TaskId"], str):
                 continue
-            consume = self.input_data.consumption.get(row["MIN"], {})\
-                .get(name_to_id.get(row["Machine"]), {})\
+            consume = (
+                self.input_data.consumption.get(row["MIN"], {})
+                .get(name_to_id.get(row["Machine"]), {})
                 .get(str(row["TaskId"]))
-                
+            )
+
             if consume:
                 machine_consume = consume.get(name_to_id[row["Machine"]])
                 for i in range(row["Start"], row["End"]):
@@ -235,7 +237,10 @@ class ScheduleSolution:
 
         # Check for initial amounts
         for min_id, amount in self.input_data.initial_amounts.items():
-            production = production.append(pd.Series({"MIN": min_id, "Time": 0, "Production": amount}), ignore_index=True)
+            production = production.append(
+                pd.Series({"MIN": min_id, "Time": 0, "Production": amount}),
+                ignore_index=True,
+            )
 
         production = pd.pivot_table(
             production, values="Production", index="Time", columns="MIN", aggfunc=np.sum
@@ -250,15 +255,15 @@ class ScheduleSolution:
             ignore_index=True,
         )
         production = production.set_index("Time").sort_index().fillna(0)
-        cumsum_production = production.cumsum()
-        cumsum_production = cumsum_production.merge(
-            pd.Series(np.arange(0, cumsum_production.index.max()), name="index"),
+        cumulative_production = production.cumsum()
+        cumulative_production = cumulative_production.merge(
+            pd.Series(np.arange(0, cumulative_production.index.max()), name="index"),
             left_index=True,
             right_index=True,
             how="outer",
         ).fillna(method="ffill")
         self.production = production
-        self.cumsum_production = cumsum_production
+        self.cumulative_production = cumulative_production
 
     def _aggregate_job_data(self):
         solver = self.solver
@@ -318,13 +323,13 @@ class ScheduleSolution:
         all_data["Utilization"] = all_data["Running"] / all_data["Total"]
 
         return all_data
-    
+
     def to_json(self):
         output = {
             "summary": self.solution_summary,
             "schedule": self.job_schedule.to_csv(),
             "production": self.production.to_csv(),
-            "cumulative_production": self.cumsum_production.to_csv(),
+            "cumulative_production": self.cumulative_production.to_csv(),
         }
         return json.dumps(output)
 
