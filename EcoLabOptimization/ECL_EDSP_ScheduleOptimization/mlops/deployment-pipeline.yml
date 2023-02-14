@@ -54,4 +54,4 @@ stages:
           scriptLocation: inlineScript
           inlineScript: |
             az ml online-endpoint create -f mlops/endpoint/model-endpoint.yml
-            az ml online-deployment -f mlops/endpoint/model-deployment.yml --all-traffic
+            az ml online-deployment create -f mlops/endpoint/model-deployment.yml --all-traffic
