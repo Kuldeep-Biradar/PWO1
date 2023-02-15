@@ -5,7 +5,7 @@ variables:
   - name: ado_service_connection_aml_ws
     value: svc-ml-eds-nus-dev-01 
   - name: resource_group
-    value: RG-ML-NCUS-Dev
+    value: GSC-NALCOWATER-001-D
   - name: aml_workspace
     value: azgscamlws01
   - name: location
