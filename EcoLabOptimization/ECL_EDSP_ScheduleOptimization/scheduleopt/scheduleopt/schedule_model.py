@@ -83,6 +83,14 @@ class ScheduleModel:
         self._cleaning_matrix = output_matrix
 
     def _load_input_data(self, input_data: Union[dict, ModelData, str, Path]):
+        """Load provided input data to internal variable
+
+        Args:
+            input_data (Union[dict, ModelData, str, Path]): Provide model input data.
+
+        Raises:
+            ValueError: Raised if schema is not correct.
+        """
         if isinstance(input_data, dict):
             self._input_data = ModelData.parse_obj(input_data)
         elif isinstance(input_data, (str, Path)):
@@ -95,9 +103,13 @@ class ScheduleModel:
             )
 
     def _initialize_inputs(self):
+        """Generate initial model inputs and reformat as necessary
+        """
+
+        # Scale forecasts from hours delivered to minutes
         time_scale_factor = 60  # input of hours
         self._jobs = self._input_data.jobs
-        forecast = collections.defaultdict(list)
+        forecast = collections.defaultdict(list) # Dict[MIN, List[Forecast Dates]]
         for item in self._input_data.forecast:
             item[2] *= time_scale_factor
             forecast[item[0]].append(item[1:])
@@ -121,12 +133,6 @@ class ScheduleModel:
                     }
         self._consumption = consumption
 
-        self._max_consumption = (
-            {}
-            if self._input_data.max_consumption is None
-            else self._input_data.max_consumption
-        )
-
         self._scheduled_shutdown = self._input_data.scheduled_shutdown
 
         # convert all hours to minutes
@@ -135,6 +141,7 @@ class ScheduleModel:
             shutdowns.append({k: v * time_scale_factor for k, v in shutdown.items()})
         self._scheduled_shutdown = shutdowns
 
+        # Get change over operation times from data files
         changeover_operations = pd.read_csv(
             files("scheduleopt.data").joinpath("cleaning-times.csv")
         )
@@ -148,6 +155,7 @@ class ScheduleModel:
 
         self._initial_amounts = self._input_data.initial_amounts
 
+        # Scale job task lengths from hours to minutes
         for min, job_data in self._jobs.items():
             for task in job_data:
                 for alt_task in task:
@@ -238,18 +246,18 @@ class ScheduleModel:
 
         job_id = job_id_min
         for job in jobs_data:
-            current_leftover = 0
-            job_consume_total = 0
+            # LMAS Collections
+            current_leftover = 0 # Currently available LMAS
+            job_consume_total = 0 # Total LMAS consumed in job
             last_consumed = 0
             task_intervals = []
-            job_consumptions = []
+            job_consumptions = [] # LMAS Jobs
             product_jobs = []
             # TODO: Make dict to generalize
             b_job_is_used = model.NewBoolVar(f"job_is_used_j{job_id}")
             previous_end = None  # save previous task end within a job
             task_job_id = job_id
             for task_id, task in enumerate(job):
-
                 # Find min and max task length within alternative tasks
                 min_duration = math.ceil(task[0][0])
                 max_duration = math.ceil(task[0][0])
@@ -372,72 +380,69 @@ class ScheduleModel:
                         b_job_is_used,
                         task[0][0],
                     )
-                task_consumption = self._consumption.get((min_id, machine_id, task_id))
+                task_consume_rate = None if len(task[0]) == 4 else task[0][4]
 
                 ## TODO: Does not work with alt reactor tasks right now
-                if task_consumption:
-                    for k, task_consume_rate in task_consumption.items():
-                        # if current_leftover > consumption, no consumption needed
-                        production_batch_size = self._batches.get(k)
-                        task_consume_total = task_consume_rate * max_duration
-                        job_consume_total += task_consume_total
-                        if task_consume_total > current_leftover:
-                            job_id += 1
+                if task_consume_rate:
+                    # Currently only support LMAS consumption
+                    k = "LMAS"
+                    # if current_leftover > consumption, no consumption needed
+                    production_batch_size = self._batches.get(k)
+                    task_consume_total = task_consume_rate * max_duration
+                    job_consume_total += task_consume_total
+                    if task_consume_total > current_leftover:
+                        job_id += 1
 
-                            # task will require one or more consume product production job
-                            production_total_batches = math.ceil(
-                                (task_consume_total - current_leftover)
-                                / production_batch_size
-                            )
-                            production_jobs_data = [
-                                self._jobs.get(k)
-                            ] * production_total_batches
-                            production_jobs = self._create_job_intervals(
-                                model, production_jobs_data, horizon, job_id
-                            )
-                            # set outer job id
-                            job_id = production_jobs[-1].job_id
-                            production_consume_duration = round(
-                                production_batch_size / task_consume_rate
-                            )
+                        # task will require one or more consume product production job
+                        production_total_batches = math.ceil(
+                            (task_consume_total - current_leftover)
+                            / production_batch_size
+                        )
+                        production_jobs_data = [
+                            self._jobs.get(k)
+                        ] * production_total_batches
+                        production_jobs = self._create_job_intervals(
+                            model, production_jobs_data, horizon, job_id
+                        )
+                        # set outer job id
+                        job_id = production_jobs[-1].job_id
+                        production_consume_duration = round(
+                            production_batch_size / task_consume_rate
+                        )
 
-                            product_jobs += production_jobs
+                        product_jobs += production_jobs
 
-                            # first job must finish before current_leftover / rate
-                            prev_job_offset = round(
-                                current_leftover / task_consume_rate
-                            )
-                            last_job = None
-                            for n, job in enumerate(production_jobs):
-                                # Require hierarchy in jobs to limit solver combinations
-                                # (i.e., require 1 followed by 2 to avoid solver for different orders )
-                                if last_job is not None:
-                                    model.Add(
-                                        job.tasks[0].start > last_job.tasks[0].start
-                                    )
+                        # first job must finish before current_leftover / rate
+                        prev_job_offset = round(current_leftover / task_consume_rate)
+                        last_job = None
+                        for n, job in enumerate(production_jobs):
+                            # Require hierarchy in jobs to limit solver combinations
+                            # (i.e., require 1 followed by 2 to avoid solver for different orders )
+                            if last_job is not None:
+                                model.Add(job.tasks[0].start > last_job.tasks[0].start)
 
-                                # Production job must finish before
-                                model.Add(
-                                    job.tasks[-1].end < (start + prev_job_offset)
-                                ).OnlyEnforceIf(job.is_present)
-                                # model.Add(job.tasks[-1].end < start)
-                                model.Add(
-                                    job.tasks[-1].end + 12 >= (start + prev_job_offset)
-                                ).OnlyEnforceIf(job.is_present)
-                                # add new consume duration
-                                prev_job_offset += production_consume_duration
-                                last_job = job
+                            # Production job must finish before
+                            model.Add(
+                                job.tasks[-1].end < (start + prev_job_offset)
+                            ).OnlyEnforceIf(job.is_present)
+                            # model.Add(job.tasks[-1].end < start)
+                            model.Add(
+                                job.tasks[-1].end + 12 >= (start + prev_job_offset)
+                            ).OnlyEnforceIf(job.is_present)
+                            # add new consume duration
+                            prev_job_offset += production_consume_duration
+                            last_job = job
 
-                            # Replace current_leftover with new leftover production
-                            current_leftover += (
-                                production_total_batches * production_batch_size
-                                - task_consume_total
-                            )
-                            job_consumptions += production_jobs
-                            jobs += production_jobs
-                        else:
-                            # There is enough leftover to not require a consume product production
-                            current_leftover -= task_consume_total
+                        # Replace current_leftover with new leftover production
+                        current_leftover += (
+                            production_total_batches * production_batch_size
+                            - task_consume_total
+                        )
+                        job_consumptions += production_jobs
+                        jobs += production_jobs
+                    else:
+                        # There is enough leftover to not require a consume product production
+                        current_leftover -= task_consume_total
                     last_consumed = self._batches.get("LMAS") - current_leftover
 
                 task_interval.consumption = self._consumption.get(
@@ -490,8 +495,8 @@ class ScheduleModel:
                 task_interval = TaskInterval(
                     min_id, job_id, 0, 0, machine_id, start, duration, end, interval, 1
                 )
-                model.Add(start >= shutdown["minimum_start"])
-                model.Add(start <= shutdown["maximum_start"])
+                model.Add(start >= shutdown["minimum_start_time"])
+                model.Add(start <= shutdown["maximum_start_time"])
 
                 job = Job(
                     job_id,
@@ -505,7 +510,6 @@ class ScheduleModel:
         return jobs
 
     def _create_consumption_constraints(self, model: cp_model.CpModel, jobs: List[Job]):
-
         self.excesses = []
 
         for n, job in enumerate(jobs):
@@ -515,7 +519,8 @@ class ScheduleModel:
 
             for prod_job in job.production_jobs[:-1]:
                 # for prod_job in job.production_jobs:
-                # If job is used, prod_job must be present
+                # If job is used, prod_job must be present for all 
+                # but last job
                 model.AddImplication(job.is_present, prod_job.is_present)
 
             last_prod_job = job.production_jobs[-1]
@@ -523,35 +528,47 @@ class ScheduleModel:
 
             other_prods = []
             for i, other_job in enumerate(jobs):
-
                 if len(other_job.production_jobs) == 0:
                     continue
 
                 if job.min_id == other_job.min_id and i >= n:
                     # for same min_id, jobs are in hierarchial order
+                    # so other_job is after current job
                     continue
 
                 # if job is before current job
                 job_after_other_job = model.NewBoolVar(
                     f"j{job.job_id}_after_j{other_job.job_id}"
                 )
+
+                # Last LMAS production of other job
                 last_other_prod_job = other_job.production_jobs[-1]
 
+                # If job_after_other_job is True, other job end is before current job start
                 model.Add(job.tasks[0].start >= other_job.tasks[-1].end).OnlyEnforceIf(
                     job_after_other_job
                 )
+
+                # If job_after_other_job is False, other job end is after current job start
                 model.Add(job.tasks[0].start < other_job.tasks[-1].end).OnlyEnforceIf(
                     job_after_other_job.Not()
                 )
+
+                # Boolean variable for last prod job is usable
                 last_prod_job_usable = model.NewBoolVar(
                     f"prod_job_less_12_hours_j{other_job.job_id}_used_by_{job.job_id}"
                 )
+
+                # If last_prod_job_usable is True, last_other_prod_job end is greather than or equal to
+                # current job start - 12
                 model.Add(
                     last_other_prod_job.tasks[0].end >= job.tasks[0].start - 12
                 ).OnlyEnforceIf(last_prod_job_usable)
+
                 model.Add(
                     last_other_prod_job.tasks[0].end <= job.tasks[0].start
                 ).OnlyEnforceIf(last_prod_job_usable)
+
                 last_prod_job_early = model.NewBoolVar(
                     f"prod_job_before_j{other_job.job_id}_used_by_{job.job_id}"
                 )
@@ -655,7 +672,6 @@ class ScheduleModel:
                 processed_mins.add(job.min_id)
 
     def _create_changeover_intervals_jobs(self, model, horizon, jobs):
-
         # Disallow overlap of machine specific tasks between different min_ids
         # Set up clean intervals between end task of job A and start task of Job B
         # for each machine_id
@@ -664,7 +680,6 @@ class ScheduleModel:
     def _create_changeover_intervals_task(
         self, model: cp_model.CpModel, horizon: int, jobs: List[Job]
     ):
-
         # Each task can have a different min task after it
         cleaning_matrix = self._cleaning_matrix
         changeover_operations = self._changeover_operations

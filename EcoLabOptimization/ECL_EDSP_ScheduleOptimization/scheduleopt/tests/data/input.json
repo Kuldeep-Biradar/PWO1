@@ -9,7 +9,7 @@
         "6": "UF2"
     },
     "scheduled_shutdown": [
-        {"duration": 168, "minimum_start": 300, "maximum_start": 450}
+        {"duration": 168, "minimum_start_time": 300, "maximum_start_time": 450}
     ],
     "inputs": {
         "LMAS": 36

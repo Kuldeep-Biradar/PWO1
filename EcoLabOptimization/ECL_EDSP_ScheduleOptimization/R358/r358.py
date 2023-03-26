@@ -1,4 +1,4 @@
-#%%
+# %%
 from scheduleopt import ScheduleModel
 from pathlib import Path
 import pandas as pd
@@ -11,9 +11,8 @@ with open("input_lmas_ramp.json") as f:
 
 model = ScheduleModel(inputs)
 # %%
-# sol = model.solve_minimize_delivery_miss(max_time_in_seconds=1200)
-sol = model.solve_least_time_schedule(max_time_in_seconds=10)
-#%%
+sol = model.solve_least_time_schedule(max_time_in_seconds=45)
+# %%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
@@ -22,10 +21,10 @@ ax.set_ylabel("Quantity of LMAS")
 ax.set_xlabel("Hours")
 fig.savefig("outputs/lmas_noshutdown_noinitial.png")
 
-#%%
+# %%
 
 
-#%%
+# %%
 min_jobs = [job for job in sol.jobs if job.min_id != "LMAS"]
 display_jobs = list(
     zip(
@@ -43,14 +42,14 @@ display_jobs = list(
     )
 )
 display_jobs
-#%%
+# %%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-#%%
+# %%
 machines_chart
 
-#%%
+# %%
 from copy import deepcopy
 
 initial_input = deepcopy(inputs)
@@ -59,7 +58,7 @@ model = ScheduleModel(initial_input, cleaning_matrix)
 # %%
 sol = model.solve_minimize_delivery_miss(max_time_in_seconds=1200)
 # sol = model.solve_least_time_schedule()
-#%%
+# %%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
@@ -69,7 +68,7 @@ ax.set_xlabel("Hours")
 ax.set_ylim(0, 360)
 fig.savefig("outputs/lmas_noshutdown_noinitial.png")
 
-#%%
+# %%
 min_jobs = [job for job in sol.jobs if job.min_id != "LMAS"]
 display_jobs = list(
     zip(
@@ -87,24 +86,24 @@ display_jobs = list(
     )
 )
 display_jobs
-#%%
+# %%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-#%%
+# %%
 machines_chart
-#%%
+# %%
 from copy import deepcopy
 
 shutdown_input = deepcopy(inputs)
 shutdown_input["scheduled_shutdown"] = [
-    {"duration": 48, "minimum_start": 60, "maximum_start": 120}
+    {"duration": 48, "minimum_start_time": 60, "maximum_start_time": 120}
 ]
 model = ScheduleModel(shutdown_input, cleaning_matrix)
 # %%
 sol = model.solve_minimize_delivery_miss(max_time_in_seconds=1200)
 # sol = model.solve_least_time_schedule()
-#%%
+# %%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
@@ -114,7 +113,7 @@ ax.set_xlabel("Hours")
 ax.set_ylim(0, 360)
 fig.savefig("outputs/lmas_noshutdown_noinitial.png")
 
-#%%
+# %%
 min_jobs = [job for job in sol.jobs if job.min_id != "LMAS"]
 display_jobs = list(
     zip(
@@ -132,11 +131,11 @@ display_jobs = list(
     )
 )
 display_jobs
-#%%
+# %%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-#%%
+# %%
 machines_chart
 
 

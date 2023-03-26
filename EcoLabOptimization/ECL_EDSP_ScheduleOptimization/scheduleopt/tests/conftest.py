@@ -6,10 +6,11 @@ import pytest
 
 @pytest.fixture()
 def input_data():
-    input_path = Path(__file__).parent.joinpath("data/input.json")
+    input_path = Path(__file__).parent.joinpath("data/input_lmas_ramp.json")
     with input_path.open() as f:
         input_data = json.load(f)
     return input_data
+
 
 @pytest.fixture()
 def cleaning_input():

@@ -9,7 +9,6 @@ class ModelData(BaseModel):
     forecast: List[List[Any]]
     batches: Dict[str, Union[float, int]]
     consumption: Dict[str, Dict[str, Dict[str, Dict[str, int]]]]
-    max_consumption: Optional[Dict[str, int]]
     initial_amounts: Optional[Dict[str, int]]
     scheduled_shutdown: Optional[List[Dict[str, int]]]
     # due_dates: Optional[List[List[Any]]]
@@ -24,11 +23,13 @@ class ModelData(BaseModel):
                 assert isinstance(task, list)
                 for alt_task in task:
                     assert isinstance(alt_task, list)
-                    assert len(alt_task) == 4
+                    assert len(alt_task) == 4 or len(alt_task) == 5
                     assert isinstance(alt_task[0], (int, float))
                     assert isinstance(alt_task[1], int)
                     assert isinstance(alt_task[2], str)
                     assert isinstance(alt_task[3], str)
+                    if len(alt_task) == 5:
+                        assert isinstance(alt_task[4], int)
         return v
 
     @validator("forecast")
@@ -46,6 +47,6 @@ class ModelData(BaseModel):
         assert isinstance(v, list)
         for item in v:
             assert "duration" in item
-            assert "minimum_start" in item
-            assert "maximum_start" in item
+            assert "minimum_start_time" in item
+            assert "maximum_start_time" in item
         return v
