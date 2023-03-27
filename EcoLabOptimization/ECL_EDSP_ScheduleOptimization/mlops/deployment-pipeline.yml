@@ -3,7 +3,7 @@
 
 variables:
   - name: ado_service_connection_aml_ws
-    value: svc-ml-eds-nus-dev-01 
+    value: GSC-NONP-->GSC-NALCOWATER-001-D-SC
   - name: resource_group
     value: GSC-NALCOWATER-001-D
   - name: aml_workspace
