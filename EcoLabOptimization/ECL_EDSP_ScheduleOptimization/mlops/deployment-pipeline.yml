@@ -14,8 +14,6 @@ variables:
 trigger:
 - none
 
-pool:
-  name: AMLVirtual
 
 stages:
 - stage: CreateFeatureData 
