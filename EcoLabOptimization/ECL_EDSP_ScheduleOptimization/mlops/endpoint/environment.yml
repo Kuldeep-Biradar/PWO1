@@ -2,4 +2,4 @@ $schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
 name: production-schedule-env
 build:
   path: ../..
-  dockerfile_path: endpoint/envs/Dockerfile
+  dockerfile_path: mlops/endpoint/envs/Dockerfile
