@@ -1,5 +1,5 @@
 $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
-name: clearing-production-schedule-deployment
+name: production-schedule-deployment
 endpoint_name: clearing-production-schedule
 code_configuration:
   code: src
