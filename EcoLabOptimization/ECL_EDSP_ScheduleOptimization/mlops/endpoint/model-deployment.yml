@@ -4,9 +4,6 @@ endpoint_name: clearing-production-schedule
 code_configuration:
   code: src
   scoring_script: run_simulation.py
-environment:
-  build:
-    path: ..
-    dockerfile_path: envs/Dockerfile
+environment: azureml:production-schedule-env:latest
 instance_type: Standard_DS3_v2
 instance_count: 1
