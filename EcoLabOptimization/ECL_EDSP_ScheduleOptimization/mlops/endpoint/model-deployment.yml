@@ -1,6 +1,6 @@
 $schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
-name: clearing-production-schedule
-endpoint_name: production-schedule-endpoint
+name: clearing-production-schedule-deployment
+endpoint_name: clearing-production-schedule
 code_configuration:
   code: src
   scoring_script: run_simulation.py
