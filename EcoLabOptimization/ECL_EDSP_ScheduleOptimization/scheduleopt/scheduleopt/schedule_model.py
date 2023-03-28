@@ -174,11 +174,11 @@ class ScheduleModel:
                         new_alt_task_data = [new_task_dur, *alt_task[1:]]
                         new_alt_tasks.append(new_alt_task_data)
                         remaining_duration -= new_task_dur
-                    new_task_data.append(new_alt_tasks)
+                    new_task_data.append([new_alt_tasks])
                 if len(new_task_data) > 1:
-                    new_task_data = list(zip(new_task_data))
+                    new_task_data = [[new_task_data]]
                 else:
-                    new_task_data = [[task] for task in new_task_data]
+                    new_task_data = [task for task in new_task_data]
                 new_job_data += new_task_data
             new_jobs[min_id] = reduce(lambda a, b: a + b, new_job_data)
         self._jobs = new_jobs
