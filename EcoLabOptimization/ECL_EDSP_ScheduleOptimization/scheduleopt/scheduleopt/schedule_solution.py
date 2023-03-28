@@ -47,7 +47,7 @@ class ScheduleSolution:
 
         # Named tuple to manipulate solution information.
         assigned_task_type = collections.namedtuple(
-            "assigned_task_type", "start job index duration min_id, machine_id"
+            "assigned_task_type", "start job index duration min_id, machine_id consumption_rate"
         )
 
         return_obj = []
@@ -88,6 +88,7 @@ class ScheduleSolution:
                             duration=solver.Value(task.duration),
                             min_id=min_id,
                             machine_id=machine,
+                            consumption_rate=task.consumption_rate
                         )
                     )
 
@@ -117,6 +118,7 @@ class ScheduleSolution:
                             "Activity": activity,
                             "Operation": operation,
                             "MachineId": assigned_task.machine_id,
+                            "ConsumptionRate": assigned_task.consumption_rate,
                         }
                     )
 
@@ -193,6 +195,7 @@ class ScheduleSolution:
 
     def _create_time_series(self):
         job_schedule = self.job_schedule
+        job_schedule["ConsumptionRate"] = job_schedule["ConsumptionRate"].fillna(0)
         production_jobs = job_schedule.loc[
             ~job_schedule["TaskId"].isin(["recharge", "changeover"])
         ]
@@ -218,19 +221,13 @@ class ScheduleSolution:
         for idx, row in job_schedule.iterrows():
             if isinstance(row["TaskId"], str):
                 continue
-            consume = (
-                self.input_data.consumption.get(row["MIN"], {})
-                .get(name_to_id.get(row["Machine"]), {})
-                .get(str(row["TaskId"]))
-            )
+            consume = row["ConsumptionRate"]
 
-            if consume:
-                machine_consume = consume.get(name_to_id[row["Machine"]])
+            if consume > 0:
                 for i in range(row["Start"], row["End"]):
-                    for task_k, task_v in consume.items():
-                        consumption_events.append(
-                            {"MIN": task_k, "Production": -task_v, "Time": i}
-                        )
+                    consumption_events.append(
+                        {"MIN": "LMAS", "Production": -consume, "Time": i}
+                    )
         consumption_events = pd.DataFrame(consumption_events)
 
         production = pd.concat([production_jobs, consumption_events])
