@@ -6,13 +6,19 @@ import json
 import numpy as np
 
 
-with open("input_lmas_ramp.json") as f:
+# with open("input_lmas_ramp.json") as f:
+#     inputs = json.load(f)
+with open("input_test/input_sample.json") as f:
     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
 # %%
+
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=1200)
-sol = model.solve_least_time_schedule(max_time_in_seconds=10)
+import time
+start = time.time()
+sol = model.solve_least_time_schedule(max_time_in_seconds=None)
+end = time.time()
 #%%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / 60
