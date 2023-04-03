@@ -54,5 +54,7 @@ stages:
             az ml workspace update --name $(aml_workspace) --resource-group $(resource_group) --image-build-compute gscamlcluster01
             az ml environment create --file EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/environment.yml
             az ml online-endpoint create -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-endpoint.yml
-            az ml online-deployment create -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-deployment.yml --all-traffic
+            az ml online-deployment create -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-deployment.yml --all-traffic || {
+              az ml online-deployment update -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-deployment.yml --all-traffic;
+            }
 
