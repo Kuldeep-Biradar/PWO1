@@ -35,6 +35,7 @@ class TaskInterval:
     consumption_rate: Optional[Any] = None
     alternates: Optional[List[Any]] = None
     overlaps: Optional[Any] = None
+    prod_jobs: Optional[Any] = None
 
 
 @dataclass
@@ -56,10 +57,12 @@ class ScheduleModel:
         self,
         input_data: Union[dict, ModelData, str, Path],
         cleaning_matrix: Optional[Dict[int, Union[pd.DataFrame, str, Path]]] = None,
+        time_scale_factor: int = 4
     ):
         self._process_cleaning_matrix(cleaning_matrix)
         self._load_input_data(input_data)
         self._initialize_inputs()
+        self._time_scale_factor = time_scale_factor
 
     def _process_cleaning_matrix(
         self, cleaning_matrix: Dict[int, Union[pd.DataFrame, str, Path]] = None
@@ -108,7 +111,7 @@ class ScheduleModel:
         """Generate initial model inputs and reformat as necessary"""
 
         # Scale forecasts from hours delivered to minutes
-        time_scale_factor = 60  # input of hours
+        time_scale_factor = self.time_scale_factor  # input of hours
         self._jobs = self._input_data.jobs
         forecast = collections.defaultdict(list)  # Dict[MIN, List[Forecast Dates]]
         for item in self._input_data.forecast:
@@ -164,23 +167,25 @@ class ScheduleModel:
                 new_task_data = []
                 for alt_task in task:
                     new_alt_tasks = []
-                    if alt_task[1] not in [0, 5]:
-                        new_alt_tasks.append(alt_task)
-                        new_task_data.append(new_alt_tasks)
+                    if len(alt_task) != 5:
+                        new_task_data.append([alt_task])
                         continue
                     remaining_duration = alt_task[0]
                     while remaining_duration > 0:
-                        new_task_dur = min(remaining_duration, 1)
+                        new_task_dur = min(remaining_duration, 4)
                         new_alt_task_data = [new_task_dur, *alt_task[1:]]
                         new_alt_tasks.append(new_alt_task_data)
                         remaining_duration -= new_task_dur
-                    new_task_data.append([new_alt_tasks])
+                    new_task_data.append(new_alt_tasks)
                 if len(new_task_data) > 1:
-                    new_task_data = [[new_task_data]]
+                    tasks = []
+                    for n in range(len(new_task_data[0])):
+                        tasks.append([task[n] for task in new_task_data])
+                    new_task_data = tasks
                 else:
-                    new_task_data = [task for task in new_task_data]
+                    new_task_data = [[task] for task in new_task_data[0]]
                 new_job_data += new_task_data
-            new_jobs[min_id] = reduce(lambda a, b: a + b, new_job_data)
+            new_jobs[min_id] = new_job_data
         self._jobs = new_jobs
 
         for min_id, job_data in self._jobs.items():
@@ -537,6 +542,90 @@ class ScheduleModel:
                 jobs.append(job)
         return jobs
 
+    def _LMAS_requirement(self, model:cp_model.CpModel, jobs:List[Job], horizon:int):
+        self.excesses = []
+        consume_tasks = []
+        last_prod_jobs = []
+        prod_jobs = []
+
+        for n, job in enumerate(jobs):
+            total_other_consumed = 0
+            if len(job.production_jobs) == 0:
+                continue
+
+            for prod_job in job.production_jobs:
+                # for prod_job in job.production_jobs:
+                # If job is used, prod_job must be present for all
+                # but last job
+                model.AddImplication(job.is_present, prod_job.is_present)
+            prod_jobs += job.production_jobs
+            consume_tasks += [task for task in job.tasks if task.consumption > 0]
+            if len(job.production_jobs) > 0:
+                last_prod_jobs.append(job.production_jobs[-1])
+        remaining_horizon = horizon
+
+        timestep = 15
+        shelf_life = 15 * 4 * 12
+        prev_timepoint = -15
+        while remaining_horizon > 0:
+            timepoint = prev_timepoint + 15
+
+            for n, task in enumerate(consume_tasks):
+                task_prod_jobs = []
+                prior_prod_jobs = []
+                for prod_job in prod_jobs:
+                    prod_job_12_hours = model.NewBoolVar("prod_job_within_12hours")
+
+                    # Check if production job ends within 12 hours of start time
+                    prod_job_within_12_hours = model.NewBoolVar("prod_job12hours")
+                    model.Add(task.start - 12 * self._time_scale_factor <= prod_job.tasks[-1].end).OnlyEnforceIf(
+                        prod_job_within_12_hours
+                    )
+
+                    # Check that task start is greater than production job end
+                    prod_job_after_end = model.NewBoolVar("prod_job_after_end")
+                    model.Add(task.start > prod_job.tasks[0].end).OnlyEnforceIf(
+                        prod_job_after_end
+                    )
+
+                    # If both true, production ends within 12 hours of start
+                    model.Add(
+                        sum([prod_job_within_12_hours, prod_job_after_end])
+                        == 2
+                        # sum([prod_job_within_12_hours, prod_job_after_end]) == 1 # ignore 12 hour time limit
+                    ).OnlyEnforceIf(prod_job_12_hours)
+
+                    # Prod job before
+                    prod_job_before_12_hours = model.NewBoolVar("prod_job_before_12_hours")
+                    model.Add(
+                        sum([prod_job_within_12_hours.Not(), prod_job_after_end]) == 2
+                    ).OnlyEnforceIf(prod_job_before_12_hours)
+
+                    task_prod_jobs.append(prod_job_12_hours)
+
+                other_task_consumption = []
+                overlaps = []
+
+                for i, other_task in enumerate(consume_tasks):
+                    if i == n:
+                        continue
+                    suffix = f"_j{task.job_id}_t{task.task_id}_oj{other_task.job_id}_ot{other_task.task_id}"
+
+                    task_start_minus_other_task_start = model.NewIntVar(
+                        -horizon, horizon, "task_start_minus_other_task_start"
+                    )
+                    task_start_minus_other_task_end = model.NewIntVar(
+                        -horizon, horizon, "task_start_minus_other_task_start"
+                    )
+                    task_end_minus_other_task_start = model.NewIntVar(
+                        -horizon, horizon, "task_start_minus_other_task_start"
+                    )
+                    task_end_minus_other_task_end = model.NewIntVar(
+                        -horizon, horizon, "task_start_minus_other_task_start"
+                    )
+
+            
+
     def _create_consumption_constraints(
         self, model: cp_model.CpModel, jobs: List[Job], horizon
     ):
@@ -562,12 +651,13 @@ class ScheduleModel:
 
         for n, task in enumerate(consume_tasks):
             task_prod_jobs = []
+            prior_prod_jobs = []
             for prod_job in prod_jobs:
                 prod_job_12_hours = model.NewBoolVar("prod_job_within_12hours")
 
                 # Check if production job ends within 12 hours of start time
                 prod_job_within_12_hours = model.NewBoolVar("prod_job12hours")
-                model.Add(task.start - 12 * 60 <= prod_job.tasks[-1].end).OnlyEnforceIf(
+                model.Add(task.start - 12 * self._time_scale_factor <= prod_job.tasks[-1].end).OnlyEnforceIf(
                     prod_job_within_12_hours
                 )
 
@@ -579,10 +669,19 @@ class ScheduleModel:
 
                 # If both true, production ends within 12 hours of start
                 model.Add(
-                    sum([prod_job_within_12_hours, prod_job_after_end]) == 2
+                    sum([prod_job_within_12_hours, prod_job_after_end])
+                    == 2
+                    # sum([prod_job_within_12_hours, prod_job_after_end]) == 1 # ignore 12 hour time limit
                 ).OnlyEnforceIf(prod_job_12_hours)
 
+                # Prod job before
+                prod_job_before_12_hours = model.NewBoolVar("prod_job_before_12_hours")
+                model.Add(
+                    sum([prod_job_within_12_hours.Not(), prod_job_after_end]) == 2
+                ).OnlyEnforceIf(prod_job_before_12_hours)
+
                 task_prod_jobs.append(prod_job_12_hours)
+                prior_prod_jobs.append(prod_job_after_end)
 
             other_task_consumption = []
             overlaps = []
@@ -754,15 +853,24 @@ class ScheduleModel:
                     -horizon, horizon, "task_start_or_12"
                 )
                 model.AddMinEquality(
-                    task_start_or_12, [task_start_minus_other_task_start, 12 * 60]
+                    task_start_or_12, [task_start_minus_other_task_start, 12 * self._time_scale_factor]
                 )
                 task_end_or_12 = model.NewIntVar(-horizon, horizon, "task_start_or_12")
                 model.AddMinEquality(
-                    task_end_or_12, [task_start_minus_other_task_end, 12 * 60]
+                    task_end_or_12, [task_start_minus_other_task_end, 12 * self._time_scale_factor]
                 )
+                # model.Add(
+                #     consumption
+                #     == (task_start_or_12 - task_end_or_12)
+                #     * int(other_task.consumption_rate)
+                # ).OnlyEnforceIf(strictly_before)
+                # ignore 12 hour
                 model.Add(
                     consumption
-                    == (task_start_or_12 - task_end_or_12)
+                    == (
+                        task_start_minus_other_task_start
+                        - task_start_minus_other_task_end
+                    )
                     * int(other_task.consumption_rate)
                 ).OnlyEnforceIf(strictly_before)
 
@@ -775,42 +883,42 @@ class ScheduleModel:
                 )
                 model.AddMinEquality(
                     task_end_o_start_or_12_duration,
-                    [task_end_minus_other_task_start, 12 * 60 + task.duration],
+                    [task_end_minus_other_task_start, 12 * self._time_scale_factor + task.duration],
                 )
                 task_end_o_end_or_12_duration = model.NewIntVar(
                     -horizon, horizon, "task_start_or_12"
                 )
                 model.AddMinEquality(
                     task_end_o_end_or_12_duration,
-                    [task_end_minus_other_task_end, 12 * 60 + task.duration],
+                    [task_end_minus_other_task_end, 12 * self._time_scale_factor + task.duration],
                 )
-                model.Add(
-                    consumption
-                    == (task_end_o_start_or_12_duration - task_end_o_end_or_12_duration)
-                    * int(other_task.consumption_rate)
-                ).OnlyEnforceIf(forward_overlap)
+                # model.Add(
+                #     consumption
+                #     == (task_end_o_start_or_12_duration - task_end_o_end_or_12_duration)
+                #     * int(other_task.consumption_rate)
+                # ).OnlyEnforceIf(forward_overlap)
 
                 # Backwards Overlap
                 # task_end_o_start_or_12_duration = model.NewIntVar(-horizon, horizon, "task_start_or_12")
                 # model.AddMinEquality(task_end_o_start_or_12_duration, [task_end_minus_other_task_start, 12 + task.duration])
-                model.Add(
-                    consumption
-                    == task_end_o_start_or_12_duration
-                    * int(other_task.consumption_rate)
-                ).OnlyEnforceIf(backwards_overlap)
+                # model.Add(
+                #     consumption
+                #     == task_end_o_start_or_12_duration
+                #     * int(other_task.consumption_rate)
+                # ).OnlyEnforceIf(backwards_overlap)
 
                 # Inner Overlap
-                model.Add(
-                    consumption
-                    == task_end_o_start_or_12_duration
-                    * int(other_task.consumption_rate)
-                ).OnlyEnforceIf(inner_overlap)
+                # model.Add(
+                #     consumption
+                #     == task_end_o_start_or_12_duration
+                #     * int(other_task.consumption_rate)
+                # ).OnlyEnforceIf(inner_overlap)
 
                 # Outer Overlap
-                model.Add(
-                    consumption
-                    == task_end_minus_other_task_start - task_end_minus_other_task_end
-                ).OnlyEnforceIf(outer_overlap)
+                # model.Add(
+                #     consumption
+                #     == (task_end_minus_other_task_start - task_end_minus_other_task_end) * int(other_task.consumption_rate)
+                # ).OnlyEnforceIf(outer_overlap)
 
                 overlaps.append(
                     [
@@ -924,13 +1032,23 @@ class ScheduleModel:
 
             model.Add(
                 (
+                    sum(prior_prod_jobs)
+                    * int(self._batches.get("LMAS"))  # All other prior production
+                    + sum(task_prod_jobs) * int(self._batches.get("LMAS"))
+                    - sum(other_task_consumption)  # All other consumption
+                    - task.consumption
+                )
+                >= 0
+            )
+            model.Add(
+                (
                     sum(task_prod_jobs) * int(self._batches.get("LMAS"))
-                    - sum(other_task_consumption)
                     - task.consumption
                 )
                 >= 0
             )
             task.overlaps = overlaps
+            task.prod_jobs = task_prod_jobs
 
             # for i, other_task in enumerate(consume_tasks):
             #     if i == n:
@@ -1465,6 +1583,7 @@ class ScheduleModel:
             deepcopy(self._cleaning_matrix),
             deepcopy(self._changeover_operations),
             deepcopy(self._input_data),
+            self._time_scale_factor
         )
 
     def solve_minimize_delivery_miss(self, timespan=1200, max_time_in_seconds=None):
@@ -1636,4 +1755,5 @@ class ScheduleModel:
             deepcopy(self._cleaning_matrix),
             deepcopy(self._changeover_operations),
             deepcopy(self._input_data),
+            self._time_scale_factor
         )

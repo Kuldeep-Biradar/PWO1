@@ -23,6 +23,7 @@ class ScheduleSolution:
         cleaning_matrix,
         changeover_operations,
         input_data,
+        time_scale_factor,
     ):
         self.machine_names = machine_names
         self.input_data = input_data
@@ -32,6 +33,7 @@ class ScheduleSolution:
         self.jobs = jobs
         self.solver = solver
         self._process_solution()
+        self._time_scale_factor = time_scale_factor
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             self.machine_stats = self._calculate_machine_stats()
             self.job_data = self._aggregate_job_data()
@@ -47,12 +49,12 @@ class ScheduleSolution:
 
         # Named tuple to manipulate solution information.
         assigned_task_type = collections.namedtuple(
-            "assigned_task_type", "start job index duration min_id, machine_id consumption_rate"
+            "assigned_task_type",
+            "start job index duration min_id, machine_id consumption_rate",
         )
 
         return_obj = []
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-
             solution_text = ""
             solution_text += "Solution:\n"
 
@@ -88,7 +90,7 @@ class ScheduleSolution:
                             duration=solver.Value(task.duration),
                             min_id=min_id,
                             machine_id=machine,
-                            consumption_rate=task.consumption_rate
+                            consumption_rate=task.consumption_rate,
                         )
                     )
 
@@ -345,8 +347,12 @@ class ScheduleSolution:
 
         alt.renderers.enable("jupyterlab")
 
-        data["Start"] = start_time + pd.to_timedelta(data["Start"], unit="minutes")
-        data["End"] = start_time + pd.to_timedelta(data["End"], unit="minutes")
+        data["Start"] = start_time + pd.to_timedelta(
+            data["Start"] * self._time_scale_factor, unit="hours"
+        )
+        data["End"] = start_time + pd.to_timedelta(
+            data["End"] * self._time_scale_factor, unit="hours"
+        )
 
         if plot_type == "jobs":
             return (

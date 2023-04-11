@@ -26,11 +26,14 @@ def process_overlaps(o):
 
 
 [process_overlaps(overlap) for overlap in sol.jobs[5].tasks[2].overlaps]
-# %%
+[process_overlaps(overlap) for overlap in sol.jobs[5].tasks[10].overlaps]
+#%%
+[sol.solver.Value(prod_task) for prod_task in sol.jobs[5].tasks[2].prod_jobs]
+#%%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-# %%
+#%%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
