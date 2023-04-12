@@ -5,7 +5,7 @@ variables:
   - name: ado_service_connection_aml_ws
     value: GSC-NONP-->GSC-NALCOWATER-001-D-SC
   - name: resource_group
-    value: RG-ML-NCUS-Dev
+    value: GSC-NALCOWATER-001-D
   - name: aml_workspace
     value: azgscamlws01
   - name: location
@@ -56,5 +56,9 @@ stages:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
-            az ml online-endpoint create -f mlops/endpoint/model-endpoint.yml
-            az ml online-deployment create -f mlops/endpoint/model-deployment.yml --all-traffic
+            az ml workspace update --name $(aml_workspace) --resource-group $(resource_group) --image-build-compute gscamlcluster01
+            az ml online-endpoint create -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-endpoint.yml
+            az ml online-deployment create -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-deployment.yml --all-traffic || {
+              az ml online-deployment update -f EcoLabOptimization/ECL_EDSP_ScheduleOptimization/mlops/endpoint/model-deployment.yml;
+            }
+

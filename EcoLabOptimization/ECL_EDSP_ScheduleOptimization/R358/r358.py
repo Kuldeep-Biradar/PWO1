@@ -6,7 +6,9 @@ import json
 import numpy as np
 
 
-with open("input_lmas_ramp.json") as f:
+# with open("input_lmas_ramp.json") as f:
+#     inputs = json.load(f)
+with open("input_test/input_sample.json") as f:
     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
