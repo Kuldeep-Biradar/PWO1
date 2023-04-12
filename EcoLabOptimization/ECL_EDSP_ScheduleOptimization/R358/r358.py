@@ -6,10 +6,10 @@ import json
 import numpy as np
 
 
-# with open("input_lmas_ramp.json") as f:
-#     inputs = json.load(f)
-with open("input_test/input_sample.json") as f:
+with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
+# with open("input_test/input_sample.json") as f:
+#     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
 # %%
@@ -37,7 +37,7 @@ machines_chart = sol.visualize_machines()
 jobs_chart
 #%%
 prod = sol.cumulative_production.copy()
-prod.index = prod.index / 60
+prod.index = prod.index / sol._time_scale_factor
 ax = prod["LMAS"].plot()
 fig = ax.get_figure()
 ax.set_ylabel("Quantity of LMAS")

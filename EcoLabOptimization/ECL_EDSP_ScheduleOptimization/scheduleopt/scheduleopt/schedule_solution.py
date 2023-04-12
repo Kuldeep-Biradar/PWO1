@@ -348,10 +348,10 @@ class ScheduleSolution:
         alt.renderers.enable("jupyterlab")
 
         data["Start"] = start_time + pd.to_timedelta(
-            data["Start"] * self._time_scale_factor, unit="hours"
+            data["Start"] / self._time_scale_factor, unit="hours"
         )
         data["End"] = start_time + pd.to_timedelta(
-            data["End"] * self._time_scale_factor, unit="hours"
+            data["End"] / self._time_scale_factor, unit="hours"
         )
 
         if plot_type == "jobs":

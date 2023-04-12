@@ -724,7 +724,9 @@ class ScheduleModel:
                     other_task_after_task,
                     task_overlaps_other_task,
                 )
-                task_consumption.append(task.consumption_rate * task_overlaps_other_task)
+                task_consumption.append(
+                    task.consumption_rate * task_overlaps_other_task
+                )
 
             time_intervals.append(
                 TimeInterval(
@@ -769,17 +771,17 @@ class ScheduleModel:
                 last_prod_jobs.pop(0)
 
             is_expired = model.NewBoolVar("is_expired")
-            expired = model.NewIntVar(0, lmas_batch, "expiring_inventory")
+            expired = model.NewIntVar(-len(prod_jobs) * lmas_batch, len(prod_jobs) * lmas_batch, "expiring_inventory")
             expired_sum = model.NewIntVar(0, lmas_batch, "expiring_inventory_actual")
             model.Add(expiring_inventory > sum(last_twelve_consumption)).OnlyEnforceIf(
                 is_expired
             )
-            model.Add(
-                expired == expiring_inventory - sum(last_twelve_consumption)
-            ).OnlyEnforceIf(is_expired)
+            model.Add(expired == expiring_inventory - sum(last_twelve_consumption))
             model.Add(expired <= 0).OnlyEnforceIf(is_expired.Not())
-            model.Add(expired == 0).OnlyEnforceIf(is_expired.Not())
-            expired_inventory.append(expired)
+            model.Add(expired > 0).OnlyEnforceIf(is_expired)
+            model.Add(expired_sum == 0).OnlyEnforceIf(is_expired.Not())
+            model.Add(expired_sum == expired).OnlyEnforceIf(is_expired)
+            expired_inventory.append(expired_sum)
 
             interval_state = model.NewIntVar(
                 -len(prod_jobs) * lmas_batch,
