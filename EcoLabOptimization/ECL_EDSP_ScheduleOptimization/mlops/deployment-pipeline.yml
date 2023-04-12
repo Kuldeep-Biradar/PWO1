@@ -44,7 +44,7 @@ stages:
             az extension add -n ml -y
             az configure --defaults group=$(resource_group) workspace=$(aml_workspace) location=$(location)
             pip install -U setuptools 'setuptools-scm[toml]' wheel build
-            cd scheduleopt
+            cd EcoLabOptimization/ECL_EDSP_ScheduleOptimization/scheduleopt
             python -m build 
             cd ..
             whlfile=$(ls ./scheduleopt/dist/*.whl | tail -n 1)
