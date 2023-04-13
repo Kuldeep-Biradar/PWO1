@@ -43,7 +43,7 @@ stages:
             az version
             az extension add -n ml -y
             az configure --defaults group=$(resource_group) workspace=$(aml_workspace) location=$(location)
-            pip install -U setuptools 'setuptools-scm[toml]' wheel build
+            pip install -U setuptools 'setuptools-scm[toml]' wheel build azureml-core
       - task: AzureCLI@2
         displayName: Submit pipeline
         inputs:
