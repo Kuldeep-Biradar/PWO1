@@ -126,16 +126,16 @@ class ScheduleModel:
             machine_names = {}
         self._machine_names = machine_names
 
-        consumption = {}
-        for min_id, consume in self._input_data.consumption.items():
-            for machine_id, task_values in consume.items():
-                for task_id, v in task_values.items():
-                    consumption[(min_id, int(machine_id), int(task_id))] = {
-                        # consumption comes in lbs/min
-                        k2: v2 * 60 / self._time_scale_factor
-                        for k2, v2 in v.items()
-                    }
-        self._consumption = consumption
+        # consumption = {}
+        # for min_id, consume in self._input_data.consumption.items():
+        #     for machine_id, task_values in consume.items():
+        #         for task_id, v in task_values.items():
+        #             consumption[(min_id, int(machine_id), int(task_id))] = {
+        #                 # consumption comes in lbs/min
+        #                 k2: v2 * 60 / self._time_scale_factor
+        #                 for k2, v2 in v.items()
+        #             }
+        # self._consumption = consumption
 
         self._scheduled_shutdown = self._input_data.scheduled_shutdown
 
