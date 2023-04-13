@@ -43,7 +43,7 @@ stages:
             az version
             az extension add -n ml -y
             az configure --defaults group=$(resource_group) workspace=$(aml_workspace) location=$(location)
-            pip install -U setuptools 'setuptools-scm[toml]' wheel build
+            pip install -U setuptools 'setuptools-scm[toml]' wheel build azureml-core
       - task: AzureCLI@2
         displayName: Submit pipeline
         inputs:
@@ -56,7 +56,7 @@ stages:
             python -m build 
             cd ..
             whlfile=$(ls ./scheduleopt/dist/*.whl | tail -n 1)
-            python mlops/environment.py --filepath $whlfile resource_group=$(resource_group) workspace_name=$(aml_workspace) subscription_id=$(subscription_id)
+            python mlops/environment.py --filepath $whlfile --resource_group=$(resource_group) --workspace_name=$(aml_workspace) --subscription_id=$(subscription_id)
             az ml workspace update --name $(aml_workspace) --resource-group $(resource_group) --image-build-compute gscamlcluster01
             az ml online-endpoint create -f mlops/endpoint/model-endpoint.yml
             az ml online-deployment create -f mlops/endpoint/model-deployment.yml --all-traffic || {
