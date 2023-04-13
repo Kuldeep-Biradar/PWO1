@@ -8,33 +8,29 @@ import numpy as np
 
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
+
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
 # %%
+# sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None)
 sol = model.solve_least_time_schedule(max_time_in_seconds=None)
 
-
-# %%
-def process_overlaps(o):
-    values = []
-    for val in o:
-        print(val)
-        sol.solver.Value(val)
-        values.append(sol.solver.Value(val))
-    values.append(o[1].Name())
-    return values
-
-
-[process_overlaps(overlap) for overlap in sol.jobs[5].tasks[2].overlaps]
-[process_overlaps(overlap) for overlap in sol.jobs[5].tasks[10].overlaps]
-#%%
-[sol.solver.Value(prod_task) for prod_task in sol.jobs[5].tasks[2].prod_jobs]
 #%%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
+
+#%%
+ti = model._time_intervals
+d = [(sol.solver.Value(inte.production), sol.solver.Value(inte.consumption), sol.solver.Value(inte.state)) for inte in ti]
+e = [sol.solver.Value(ex) for ex in model._expired]
+import pandas as pd
+f=pd.DataFrame(d, columns=["Production", "Consumption", "State"])
+f["Expired"] = e
+f["Inventory"] = f["Production"] + f["Expired"] 
+f["State"].plot()
 #%%
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / sol._time_scale_factor

@@ -242,6 +242,7 @@ class ScheduleModel:
     def _get_max_horizon(self, jobs_data):
         # Computes maximum horizon dynamically as the sum of all durations.
         horizon = 0
+
         for job in jobs_data:
             for task in job:
                 max_task_duration = 0
@@ -665,6 +666,8 @@ class ScheduleModel:
             consumption: Any
             task_consumptions: Any
             state: Any = None
+            last_twelve_consumption: Any = None
+            last_twelve_prod: Any = None
 
         time_intervals = []
         start = 0
@@ -771,15 +774,16 @@ class ScheduleModel:
                 last_prod_jobs.pop(0)
 
             is_expired = model.NewBoolVar("is_expired")
-            expired = model.NewIntVar(-len(prod_jobs) * lmas_batch, len(prod_jobs) * lmas_batch, "expiring_inventory")
-            expired_sum = model.NewIntVar(0, lmas_batch, "expiring_inventory_actual")
-            model.Add(expiring_inventory > sum(last_twelve_consumption)).OnlyEnforceIf(
-                is_expired
+            expired = model.NewIntVar(
+                -len(prod_jobs) * lmas_batch,
+                len(prod_jobs) * lmas_batch,
+                "expiring_inventory",
             )
+            expired_sum = model.NewIntVar(0, lmas_batch, "expiring_inventory_actual")
             model.Add(expired == expiring_inventory - sum(last_twelve_consumption))
             model.Add(expired <= 0).OnlyEnforceIf(is_expired.Not())
-            model.Add(expired > 0).OnlyEnforceIf(is_expired)
             model.Add(expired_sum == 0).OnlyEnforceIf(is_expired.Not())
+            model.Add(expired > 0).OnlyEnforceIf(is_expired)
             model.Add(expired_sum == expired).OnlyEnforceIf(is_expired)
             expired_inventory.append(expired_sum)
 
@@ -792,8 +796,8 @@ class ScheduleModel:
                 interval_state
                 == (
                     time_interval.prod_jobs * lmas_batch
-                    - sum(prior_consumption)
-                    - sum(expired_inventory)
+                    - sum([*prior_consumption])
+                    - sum([*expired_inventory])
                 )
             )
             model.Add(interval_state >= 0)
@@ -1192,6 +1196,7 @@ class ScheduleModel:
         if max_time_in_seconds is not None:
             solver.parameters.max_time_in_seconds = max_time_in_seconds
         solver.parameters.num_search_workers = cpu_count()
+        solver.parameters.log_search_progress = True
 
         solution_printer = SolutionPrinter()
         # status = solver.Solve(model, solution_printer)
@@ -1231,8 +1236,8 @@ class ScheduleModel:
 
         jobs = self._create_job_intervals(model, jobs_data, horizon)
 
-        self._create_consumption_constraints(model, jobs)
-        # self._require_initial_production_jobs(model, jobs)
+        self._create_consumption_constraints(model, jobs, horizon)
+        self._require_initial_production_jobs(model, jobs)
 
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
 
