@@ -8,7 +8,6 @@ class ModelData(BaseModel):
     jobs: Dict[str, List[List[List[Any]]]]
     forecast: List[List[Any]]
     batches: Dict[str, Union[float, int]]
-    consumption: Dict[str, Dict[str, Dict[str, Dict[str, int]]]]
     initial_amounts: Optional[Dict[str, int]]
     scheduled_shutdown: Optional[List[Dict[str, int]]]
     # due_dates: Optional[List[List[Any]]]
