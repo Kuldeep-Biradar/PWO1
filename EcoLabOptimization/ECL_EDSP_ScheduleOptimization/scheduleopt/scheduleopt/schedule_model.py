@@ -661,13 +661,14 @@ class ScheduleModel:
             start: Any
             end: Any
             all_prod_jobs: Any
-            production: Any
             prod_jobs: Any
             consumption: Any
             task_consumptions: Any
+            production: Any = 0
             state: Any = None
             last_twelve_consumption: Any = None
             last_twelve_prod: Any = None
+            at_risk: Any = None
 
         time_intervals = []
         start = 0
@@ -682,7 +683,9 @@ class ScheduleModel:
             for prod_job in prod_jobs:
                 prod_job_before = model.NewBoolVar("prod_job_before")
 
-                model.Add(start >= prod_job.tasks[0].end).OnlyEnforceIf(prod_job_before)
+                model.Add(start >= prod_job.tasks[-1].end).OnlyEnforceIf(
+                    prod_job_before
+                )
                 model.Add(start < prod_job.tasks[0].end).OnlyEnforceIf(
                     prod_job_before.Not()
                 )
@@ -690,12 +693,12 @@ class ScheduleModel:
 
                 prod_job_exactly_12_hours = model.NewBoolVar("prod_job_exactly_12hours")
 
-                model.Add(
-                    start == prod_job.tasks[-1].end + int(12 * self._time_scale_factor)
-                ).OnlyEnforceIf(prod_job_exactly_12_hours)
-                model.Add(
-                    start != prod_job.tasks[-1].end + int(12 * self._time_scale_factor)
-                ).OnlyEnforceIf(prod_job_exactly_12_hours.Not())
+                model.Add(start == prod_job.tasks[-1].end).OnlyEnforceIf(
+                    prod_job_exactly_12_hours
+                )
+                model.Add(start != prod_job.tasks[-1].end).OnlyEnforceIf(
+                    prod_job_exactly_12_hours.Not()
+                )
 
                 exactly_12_hours.append(prod_job_exactly_12_hours)
 
@@ -748,44 +751,84 @@ class ScheduleModel:
         prior_production = []
         prior_consumption = []
 
-        last_twelve_prod = []
         last_twelve_consumption = []
         expired_inventory = []
+        # max_lmas_volume = int(1.5 * lmas_batch)
+        max_lmas_volume = lmas_batch * len(prod_jobs)
+        max_lmas_volume = lmas_batch * math.floor(12 * self._time_scale_factor/self._jobs["LMAS"][0][0][0])
         for n, time_interval in enumerate(time_intervals):
             # LMAS only expires if consumption < expiring production volume over interval
-            if n >= 12 * self._time_scale_factor:
+            if n >= 12 * self._time_scale_factor - 1:
                 expiring_inventory = time_intervals[
-                    n - 12 * self._time_scale_factor
+                    n - 12 * self._time_scale_factor + 1
                 ].production
             else:
                 expiring_inventory = 0
-
-            prior_production.append(time_interval.production)
+                
+            if n >= 12 * self._time_scale_factor:
+                expiring_state = time_intervals[n - 12 * self._time_scale_factor].state
+            else:
+                expiring_state = 0
             prior_consumption.append(time_interval.consumption)
 
-            last_twelve_prod.append(time_interval.production)
             last_twelve_consumption.append(time_interval.consumption)
 
-            if len(last_twelve_prod) > 12 * self._time_scale_factor:
-                last_twelve_prod.pop(0)
             if len(last_twelve_consumption) > 12 * self._time_scale_factor:
                 last_twelve_consumption.pop(0)
-            if len(last_prod_jobs) > 12 * self._time_scale_factor:
-                last_prod_jobs.pop(0)
 
-            is_expired = model.NewBoolVar("is_expired")
-            expired = model.NewIntVar(
+            prod = time_interval.production
+            consume = time_interval.consumption
+            if n > 0:
+                prev_state = time_intervals[n - 1].state
+            else:
+                prev_state = 0
+
+            # is_expired = model.NewBoolVar("is_expired")
+            # expired = model.NewIntVar(
+            #     -len(prod_jobs) * lmas_batch,
+            #     len(prod_jobs) * lmas_batch,
+            #     "expiring_inventory",
+            # )
+            # expired_sum = model.NewIntVar(0, lmas_batch, "expiring_inventory_actual")
+            # model.Add(expired == expiring_inventory - sum(last_twelve_consumption))
+            # model.Add(expired <= 0).OnlyEnforceIf(is_expired.Not())
+            # model.Add(expired_sum == 0).OnlyEnforceIf(is_expired.Not())
+            # model.Add(expired > 0).OnlyEnforceIf(is_expired)
+            # model.Add(expired_sum == expired).OnlyEnforceIf(is_expired)
+            # expired_inventory.append(expired_sum)
+            state_expired = model.NewBoolVar("state_expired")
+            state_expiration = model.NewIntVar(
                 -len(prod_jobs) * lmas_batch,
                 len(prod_jobs) * lmas_batch,
+                "expiring_inventory_test",
+            )
+            state_expiration_value = model.NewIntVar(
+                -max_lmas_volume,
+                max_lmas_volume,
                 "expiring_inventory",
             )
-            expired_sum = model.NewIntVar(0, lmas_batch, "expiring_inventory_actual")
-            model.Add(expired == expiring_inventory - sum(last_twelve_consumption))
-            model.Add(expired <= 0).OnlyEnforceIf(is_expired.Not())
-            model.Add(expired_sum == 0).OnlyEnforceIf(is_expired.Not())
-            model.Add(expired > 0).OnlyEnforceIf(is_expired)
-            model.Add(expired_sum == expired).OnlyEnforceIf(is_expired)
-            expired_inventory.append(expired_sum)
+
+            last_twelve = model.NewIntVar(0, max_lmas_volume*100, "last_twelve")
+            if n > 12 * self._time_scale_factor - 1:
+                # all_consumed
+                model.Add(last_twelve == sum(last_twelve_consumption[:]))
+                model.Add(
+                    state_expiration
+                    == expiring_inventory + expiring_state - last_twelve
+                )
+                model.Add(state_expiration <= 0).OnlyEnforceIf(state_expired.Not())
+                model.Add(state_expiration_value == 0).OnlyEnforceIf(
+                    state_expired.Not()
+                )
+                model.Add(state_expiration > 0).OnlyEnforceIf(state_expired)
+                model.Add(state_expiration_value == state_expiration).OnlyEnforceIf(
+                    state_expired
+                )
+                # (expiring_state - prev_state) - (expiring_state + sum(prior_production[:]) - sum(prior_consumption[:]))
+            else:
+                model.Add(state_expiration_value == 0)
+                model.Add(last_twelve == 0)
+            expired_inventory.append(state_expiration_value)
 
             interval_state = model.NewIntVar(
                 -len(prod_jobs) * lmas_batch,
@@ -793,15 +836,12 @@ class ScheduleModel:
                 "interval_value",
             )
             model.Add(
-                interval_state
-                == (
-                    time_interval.prod_jobs * lmas_batch
-                    - sum([*prior_consumption])
-                    - sum([*expired_inventory])
-                )
+                interval_state == (prev_state + prod - consume - state_expiration_value)
             )
             model.Add(interval_state >= 0)
+            # model.Add(interval_state <= max_lmas_volume)
             time_interval.state = interval_state
+            time_interval.last_twelve_consumption = last_twelve
         self._time_intervals = time_intervals
         self._expired = expired_inventory
         self._consumption = prior_consumption
@@ -1197,18 +1237,11 @@ class ScheduleModel:
             solver.parameters.max_time_in_seconds = max_time_in_seconds
         solver.parameters.num_search_workers = cpu_count()
         solver.parameters.log_search_progress = True
+        solver.parameters.random_seed = 1
 
         solution_printer = SolutionPrinter()
-        # status = solver.Solve(model, solution_printer)
 
-        # # add job hints
-        # for job in jobs:
-        #     if job.min_id == "LMAS":
-        #         continue
-
-        #     for task in job.tasks:
-        #         model.AddHint(task.start, solver.Value(task.start))
-        #         model.AddHint(task.end, solver.Value(task.end))
+        # solver.parameters.max_time_in_seconds = 6000
 
         # solver.parameters.max_time_in_seconds = 6000
         status = solver.Solve(model, solution_printer)

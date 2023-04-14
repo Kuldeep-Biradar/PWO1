@@ -1,5 +1,6 @@
 # %%
 from scheduleopt import ScheduleModel
+import matplotlib.pyplot as plt
 from pathlib import Path
 import pandas as pd
 import json
@@ -8,14 +9,14 @@ import numpy as np
 
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
-
+inputs["forecast"] = [['M07A5', 60361, 744]]
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None)
-sol = model.solve_least_time_schedule(max_time_in_seconds=None)
+sol = model.solve_least_time_schedule(max_time_in_seconds=600)
 
 #%%
 jobs_chart = sol.visualize_jobs()
@@ -24,17 +25,31 @@ jobs_chart
 
 #%%
 ti = model._time_intervals
-d = [(sol.solver.Value(inte.production), sol.solver.Value(inte.consumption), sol.solver.Value(inte.state)) for inte in ti]
+d = [(sol.solver.Value(inte.production), sol.solver.Value(inte.consumption), sol.solver.Value(inte.state), sol.solver.Value(inte.last_twelve_consumption)) for inte in ti]
 e = [sol.solver.Value(ex) for ex in model._expired]
 import pandas as pd
-f=pd.DataFrame(d, columns=["Production", "Consumption", "State"])
+f=pd.DataFrame(d, columns=["Production", "Consumption", "State", "RollingConsumption"])
 f["Expired"] = e
-f["Inventory"] = f["Production"] + f["Expired"] 
-f["State"].plot()
+# f["Inventory"] = f["Production"] + f["Expired"]
+ax = f["State"].plot()
+f["Expired"].plot()
+ax.axhline(y=112519, lw=1, color="k")
+plt.show()
 #%%
+f["RollingConsumption"].plot()
+f["Consumption"].rolling(24).sum().fillna(0).plot()
+# f["Consumption"].plot()
+# f["Expired"].plot()
+# f["Production"].plot()
+plt.show()
+#%%
+expir = f["Expired"].copy()
+expir.index /= sol._time_scale_factor
 prod = sol.cumulative_production.copy()
 prod.index = prod.index / sol._time_scale_factor
-ax = prod["LMAS"].plot()
+ax = prod["LMAS"].plot(label="Production")
+expir.plot(ax=ax, label="Expired")
+ax.legend()
 fig = ax.get_figure()
 ax.set_ylabel("Quantity of LMAS")
 ax.set_xlabel("Hours")
