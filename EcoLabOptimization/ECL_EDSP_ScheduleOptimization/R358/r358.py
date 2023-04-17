@@ -9,40 +9,60 @@ import numpy as np
 
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
-inputs["forecast"] = [['M07A5', 60361, 744]]
+# inputs["forecast"] = [["M07A5", 60361, 744]]
+inputs["forecast"] = inputs["forecast2"]
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
 model = ScheduleModel(inputs)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None)
-sol = model.solve_least_time_schedule(max_time_in_seconds=600)
+sol = model.solve_least_time_schedule(max_time_in_seconds=None)
+# %%
 
-#%%
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-
 #%%
+
 ti = model._time_intervals
-d = [(sol.solver.Value(inte.production), sol.solver.Value(inte.consumption), sol.solver.Value(inte.state), sol.solver.Value(inte.last_twelve_consumption)) for inte in ti]
-e = [sol.solver.Value(ex) for ex in model._expired]
+d = [
+    (
+        sol.solver.Value(inte.production),
+        sol.solver.Value(inte.consumption),
+        sol.solver.Value(inte.state),
+        # sol.solver.Value(inte.last_twelve_consumption),
+    )
+    for inte in ti
+]
 import pandas as pd
-f=pd.DataFrame(d, columns=["Production", "Consumption", "State", "RollingConsumption"])
+
+e = [sol.solver.Value(ex) for ex in model._expired]
+f = pd.DataFrame(
+    d, columns=["Production", "Consumption", "State"]
+)
 f["Expired"] = e
 # f["Inventory"] = f["Production"] + f["Expired"]
 ax = f["State"].plot()
 f["Expired"].plot()
+# f["Production"].plot()
 ax.axhline(y=112519, lw=1, color="k")
 plt.show()
-#%%
-f["RollingConsumption"].plot()
-f["Consumption"].rolling(24).sum().fillna(0).plot()
+# %%
+# f["RollingConsumption"].plot()
+
+f["RollingProd"] = f["Production"].rolling(window=24).sum().shift(-23)
+f["RollingCon"] = f["Consumption"].rolling(window=24).sum().shift(-23)
+(f["RollingProd"] - f["RollingCon"] - f["Expired"]).loc[f["Production"] > 0].plot()
 # f["Consumption"].plot()
 # f["Expired"].plot()
 # f["Production"].plot()
 plt.show()
 #%%
+mask = f["Production"] > 0
+prev_state = f["State"].iloc[mask.index[mask].values]
+prev_state + f["Production"].loc[mask] - f["Expired"].loc[mask] - f["Consumption"].loc[mask]
+# %%
 expir = f["Expired"].copy()
 expir.index /= sol._time_scale_factor
 prod = sol.cumulative_production.copy()
