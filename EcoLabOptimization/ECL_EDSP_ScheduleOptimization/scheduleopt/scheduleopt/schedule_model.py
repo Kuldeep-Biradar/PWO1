@@ -557,11 +557,15 @@ class ScheduleModel:
             if len(job.production_jobs) == 0:
                 continue
 
+            prev_prod_job = None
             for prod_job in job.production_jobs:
                 # for prod_job in job.production_jobs:
                 # If job is used, prod_job must be present for all
                 # but last job
                 model.AddImplication(job.is_present, prod_job.is_present)
+                if prev_prod_job is not None:
+                    model.Add(prev_prod_job.tasks[0].start < prod_job.task[0].start)
+                prev_prod_job = prod_job
             prod_jobs += job.production_jobs
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
             if len(job.production_jobs) > 0:
