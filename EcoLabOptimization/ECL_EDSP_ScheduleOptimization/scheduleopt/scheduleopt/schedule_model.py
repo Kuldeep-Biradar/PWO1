@@ -454,8 +454,8 @@ class ScheduleModel:
                         for n, job in enumerate(production_jobs):
                             # Require hierarchy in jobs to limit solver combinations
                             # (i.e., require 1 followed by 2 to avoid solver for different orders )
-                            if last_job is not None:
-                                model.Add(job.tasks[0].start > last_job.tasks[0].start)
+                            # if last_job is not None:
+                            #     model.Add(job.tasks[0].start > last_job.tasks[0].start)
 
                             # Production job must finish before
                             # model.Add(
@@ -662,6 +662,12 @@ class ScheduleModel:
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
             if len(job.production_jobs) > 0:
                 last_prod_jobs.append(job.production_jobs[-1])
+
+        prev_prod_job = None
+        for prod_job in prod_jobs:
+            if prev_prod_job is not None:
+                model.Add(prev_prod_job.tasks[-1].end <= prod_job.tasks[0].start)
+            prev_prod_job = prod_job
 
         @dataclass
         class TimeInterval:
@@ -1420,7 +1426,7 @@ class ScheduleModel:
                 job.due_date_num = due_date_num
 
         self._create_changeover_intervals_task(model, horizon, jobs)
-        job_ends = [job.tasks[-1].end for job in jobs]
+        job_ends = [job.tasks[-1].end for job in jobs if job.tasks[-1].min_id != "LMAS"]
         self._add_no_overlap_condition(model, jobs)
 
         # Makespan objective.
