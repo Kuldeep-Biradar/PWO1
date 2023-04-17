@@ -9,8 +9,8 @@ import numpy as np
 
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
-# inputs["forecast"] = [["M07A5", 60361, 744]]
-inputs["forecast"] = inputs["forecast2"]
+inputs["forecast"] = [["M07A5", 60361, 744]]
+# inputs["forecast"] = inputs["forecast2"]
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
