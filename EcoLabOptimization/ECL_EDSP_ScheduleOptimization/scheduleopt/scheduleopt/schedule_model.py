@@ -891,17 +891,18 @@ class ScheduleModel:
             model.Add(sum([state_expired, production_gt_0]) < 2).OnlyEnforceIf(
                 both_true.Not()
             )
-            if n > 12 * self._time_scale_factor - 1:
-                model.Add(prev_state >= 0).OnlyEnforceIf(production_gt_0)
-                # model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
-                # model.Add(
-                #     interval_state + sum(next_twelve_production[:])
-                #     >= sum(next_twelve_consumption[:])
-                # ).OnlyEnforceIf(production_gt_0)
-            else:
-                model.Add(interval_state >= 0)
-            if n == len(time_intervals) - 1:
-                model.Add(interval_state >= 0)
+            model.Add(interval_state >= 0)
+            # if n > 12 * self._time_scale_factor - 1:
+            #     model.Add(prev_state >= 0).OnlyEnforceIf(production_gt_0)
+            #     model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
+            #     # model.Add(
+            #     #     interval_state + sum(next_twelve_production[:])
+            #     #     >= sum(next_twelve_consumption[:])
+            #     # ).OnlyEnforceIf(production_gt_0)
+            # else:
+            #     model.Add(interval_state >= 0)
+            # if n == len(time_intervals) - 1:
+            #     model.Add(interval_state >= 0)
             # model.Add(interval_state <= max_lmas_volume)
             time_interval.state = interval_state
             time_interval.last_twelve_consumption = next_twelve
