@@ -662,21 +662,21 @@ class ScheduleModel:
                 continue
 
             previous_end = 0
-            for n, prod_job in enumerate(job.production_jobs):
+            for prod_job in job.production_jobs:
                 # for prod_job in job.production_jobs:
                 # If job is used, prod_job must be present for all
                 # but last job
                 model.AddImplication(job.is_present, prod_job.is_present)
-                model.AddHint(
-                    prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value)
-                )
             prod_jobs += job.production_jobs
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
             if len(job.production_jobs) > 0:
                 last_prod_jobs.append(job.production_jobs[-1])
 
         prev_prod_job = None
-        for prod_job in prod_jobs:
+        for n, prod_job in enumerate(prod_jobs):
+            model.AddHint(
+                prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value)
+            )
             if prev_prod_job is not None:
                 model.Add(prev_prod_job.tasks[-1].end <= prod_job.tasks[0].start)
             prev_prod_job = prod_job
