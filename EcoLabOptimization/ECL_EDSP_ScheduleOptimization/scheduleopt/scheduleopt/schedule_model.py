@@ -242,22 +242,34 @@ class ScheduleModel:
     def _get_max_horizon(self, jobs_data):
         # Computes maximum horizon dynamically as the sum of all durations.
         horizon = 0
+        # Min horizon is the maximum minimum time in a machine
+        min_horizon = collections.defaultdict(lambda: 0)
 
         for job in jobs_data:
             for task in job:
+                min_task_duration = collections.defaultdict(lambda: math.inf)
                 max_task_duration = 0
                 for alternative in task:
                     max_task_duration = max(max_task_duration, alternative[0])
+                    min_task_duration[alternative[1]] = min(
+                        min_task_duration[alternative[1]], alternative[0]
+                    )
                 horizon += max_task_duration
+                for machine_id, task_duration in min_task_duration.items():
+                    min_horizon[machine_id] += task_duration
 
         # Add maximum cleaning time span to horizon
         max_cleaning_time = max(self._changeover_operations.values())
         horizon += max_cleaning_time * len(jobs_data)
 
+        min_cleaning_time = min(self._changeover_operations.values())
+        min_horizon = max(min_horizon.values()) + min_cleaning_time * len(jobs_data)
+
         if self._scheduled_shutdown is not None:
             for item in self._scheduled_shutdown:
                 horizon += item["duration"]
-        return int(math.ceil(horizon))
+                min_horizon += item["duration"]
+        return int(math.floor(min_horizon)), int(math.ceil(horizon))
 
     def _create_job_intervals(self, model, jobs_data, horizon, job_id_min=0):
         # Named tuple to store information about created variables.
@@ -891,18 +903,17 @@ class ScheduleModel:
             model.Add(sum([state_expired, production_gt_0]) < 2).OnlyEnforceIf(
                 both_true.Not()
             )
-            model.Add(interval_state >= 0)
-            # if n > 12 * self._time_scale_factor - 1:
-            #     model.Add(prev_state >= 0).OnlyEnforceIf(production_gt_0)
-            #     model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
-            #     # model.Add(
-            #     #     interval_state + sum(next_twelve_production[:])
-            #     #     >= sum(next_twelve_consumption[:])
-            #     # ).OnlyEnforceIf(production_gt_0)
-            # else:
-            #     model.Add(interval_state >= 0)
-            # if n == len(time_intervals) - 1:
-            #     model.Add(interval_state >= 0)
+            if n > 12 * self._time_scale_factor - 1:
+                model.Add(prev_state >= 0).OnlyEnforceIf(production_gt_0)
+                model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
+                # model.Add(
+                #     interval_state + sum(next_twelve_production[:])
+                #     >= sum(next_twelve_consumption[:])
+                # ).OnlyEnforceIf(production_gt_0)
+            else:
+                model.Add(interval_state >= 0)
+            if n == len(time_intervals) - 1:
+                model.Add(interval_state >= 0)
             # model.Add(interval_state <= max_lmas_volume)
             time_interval.state = interval_state
             time_interval.last_twelve_consumption = next_twelve
@@ -1267,7 +1278,7 @@ class ScheduleModel:
 
         jobs_data = self._get_required_jobs()
 
-        horizon = self._get_max_horizon(jobs_data)
+        min_horizon, horizon = self._get_max_horizon(jobs_data)
 
         # Create the model.
         model = cp_model.CpModel()
@@ -1291,7 +1302,7 @@ class ScheduleModel:
         self._add_no_overlap_condition(model, jobs)
 
         # Makespan objective.
-        makespan = model.NewIntVar(-1, horizon, "makespan")
+        makespan = model.NewIntVar(min_horizon, horizon, "makespan")
         model.AddMaxEquality(makespan, job_ends)
 
         model.Minimize(makespan)
@@ -1328,7 +1339,7 @@ class ScheduleModel:
 
         jobs_data = self._get_required_jobs()
 
-        horizon = self._get_max_horizon(jobs_data)
+        min_horizon, horizon = self._get_max_horizon(jobs_data)
 
         # Create the model.
         model = cp_model.CpModel()
