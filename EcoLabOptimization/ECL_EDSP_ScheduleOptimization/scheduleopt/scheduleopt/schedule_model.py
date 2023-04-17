@@ -650,12 +650,14 @@ class ScheduleModel:
                 continue
 
             previous_end = 0
-            for n,prod_job in enumerate(job.production_jobs):
+            for n, prod_job in enumerate(job.production_jobs):
                 # for prod_job in job.production_jobs:
                 # If job is used, prod_job must be present for all
                 # but last job
                 model.AddImplication(job.is_present, prod_job.is_present)
-                model.AddHint(prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value))
+                model.AddHint(
+                    prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value)
+                )
             prod_jobs += job.production_jobs
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
             if len(job.production_jobs) > 0:
@@ -885,7 +887,7 @@ class ScheduleModel:
             )
             if n > 12 * self._time_scale_factor - 1:
                 model.Add(prev_state >= 0).OnlyEnforceIf(production_gt_0)
-                model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
+                # model.Add(interval_state >= 0).OnlyEnforceIf(production_gt_0)
                 # model.Add(
                 #     interval_state + sum(next_twelve_production[:])
                 #     >= sum(next_twelve_consumption[:])
@@ -1253,7 +1255,7 @@ class ScheduleModel:
             if len(intervals) > 1:
                 model.AddNoOverlap(intervals)
 
-    def solve_least_time_schedule(self, max_time_in_seconds=45):
+    def solve_least_time_schedule(self, max_time_in_seconds=45, verbose=False):
         """Minimal jobshop problem."""
 
         jobs_data = self._get_required_jobs()
@@ -1269,7 +1271,7 @@ class ScheduleModel:
 
         # Check for consumption
         self._create_consumption_constraints(model, jobs, horizon)
-        self._require_initial_production_jobs(model, jobs)
+        # self._require_initial_production_jobs(model, jobs)
 
         # # Force all jobs to be non-consumption products to be present
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
@@ -1277,7 +1279,7 @@ class ScheduleModel:
         model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
-        job_ends = [job.tasks[-1].end for job in jobs]
+        job_ends = [job.tasks[-1].end for job in jobs if job.tasks[-1].min_id != "LMAS"]
 
         self._add_no_overlap_condition(model, jobs)
 
@@ -1292,7 +1294,8 @@ class ScheduleModel:
         if max_time_in_seconds is not None:
             solver.parameters.max_time_in_seconds = max_time_in_seconds
         solver.parameters.num_search_workers = cpu_count()
-        solver.parameters.log_search_progress = True
+        if verbose:
+            solver.parameters.log_search_progress = True
         solver.parameters.random_seed = 1
 
         solution_printer = SolutionPrinter()
@@ -1313,7 +1316,7 @@ class ScheduleModel:
             self._time_scale_factor,
         )
 
-    def solve_minimize_delivery_miss(self, timespan=1200, max_time_in_seconds=None):
+    def solve_minimize_delivery_miss(self, max_time_in_seconds=None, verbose=False):
         """Minimal jobshop problem."""
 
         jobs_data = self._get_required_jobs()
@@ -1326,7 +1329,7 @@ class ScheduleModel:
         jobs = self._create_job_intervals(model, jobs_data, horizon)
 
         self._create_consumption_constraints(model, jobs, horizon)
-        self._require_initial_production_jobs(model, jobs)
+        # self._require_initial_production_jobs(model, jobs)
 
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
 
@@ -1378,16 +1381,9 @@ class ScheduleModel:
                     last_task = last_due_date_job.tasks[-1]
 
                     suffix_name = f"j{job_idx}_due{due_date[1]}"
-                    start = model.NewIntVar(0, horizon, "start" + suffix_name)
                     duration = model.NewIntVar(
                         -horizon, horizon, "duration" + suffix_name
                     )
-                    end = model.NewIntVar(0, horizon, "end" + suffix_name)
-                    interval = model.NewOptionalIntervalVar(
-                        start, duration, end, job_is_used, "interval" + suffix_name
-                    )
-
-                    # if due date is missed, duration > 0
 
                     num_days_missed = model.NewIntVar(
                         -horizon, horizon, "days_missed" + suffix_name
@@ -1437,6 +1433,8 @@ class ScheduleModel:
         if max_time_in_seconds is not None:
             solver.parameters.max_time_in_seconds = max_time_in_seconds
         solver.parameters.num_search_workers = cpu_count()
+        if verbose:
+            solver.parameters.log_search_progress = True
 
         all_starts = []
         for job in jobs:
@@ -1464,7 +1462,7 @@ class ScheduleModel:
         #         model.AddHint(task.start, solver.Value(task.start))
         #         model.AddHint(task.end, solver.Value(task.end))
 
-        model.Add(all_days_missed == sum(due_dates_num_days_missed) + makespan)
+        model.Add(all_days_missed == sum(due_dates_num_days_missed) * 10 + makespan)
         model.Minimize(all_days_missed)
 
         # Creates the solver and solve.
