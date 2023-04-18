@@ -756,7 +756,7 @@ class ScheduleModel:
             model.Add(current_production <= 0).OnlyEnforceIf(production_gt_0.Not())
             if n > 12 * self._time_scale_factor - 1:
                 # all_consumed
-                modelkAdd(next_twelve == sum(next_twelve_consumption[:]))
+                model.Add(next_twelve == sum(next_twelve_consumption[:]))
                 model.Add(
                     state_expiration
                     == current_production
