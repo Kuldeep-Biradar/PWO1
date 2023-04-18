@@ -10,8 +10,8 @@ import numpy as np
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
 # inputs["forecast"] = [["M07A5", 60361, 744]]
-# inputs["forecast"] = inputs["forecast2"]
-print(inputs["forecast"])
+inputs["forecast"] = inputs["forecast4"]
+# print(inputs["forecast"])
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
@@ -47,7 +47,7 @@ f["Expired"] = e
 ax = f["State"].plot()
 f["Expired"].plot()
 # f["Production"].plot()
-ax.axhline(y=112519, lw=1, color="k")
+ax.axhline(y=112519/10, lw=1, color="k")
 plt.show()
 # %%
 # f["RollingConsumption"].plot()
