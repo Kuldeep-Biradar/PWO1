@@ -10,45 +10,95 @@ import numpy as np
 with open("input_lmas_ramp.json") as f:
     inputs = json.load(f)
 # inputs["forecast"] = [["M07A5", 60361, 744]]
-inputs["forecast"] = inputs["forecast4"]
+# inputs["forecast"] = [["B05Y5", 5461, 744]]
+# inputs["forecast"] = [["M07A5_2", 19461, 744]]
+inputs["forecast"] = inputs["forecast2"]
 # print(inputs["forecast"])
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
-model = ScheduleModel(inputs, time_scale_factor=2)
+model = ScheduleModel(inputs, time_scale_factor=4)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
 sol = model.solve_least_time_schedule(max_time_in_seconds=None, verbose=True)
+
+# %%
+expiration = pd.DataFrame(
+    [
+        (
+            sol.solver.Value(dur),
+            sol.solver.Value(ex),
+            sol.solver.Value(state),
+            sol.solver.Value(current_states),
+            sol.solver.Value(future_states),
+            sol.solver.Value(consume),
+        )
+        for dur, ex, state, current_states, future_states, consume in model._expirations
+    ],
+    columns=[
+        "Time",
+        "Production",
+        "Prior State",
+        "Current State",
+        "Future State",
+        "Consume",
+    ],
+)
+expiration
+# %%
+sol.production
+
+
+
+
+# %%
+for n in range(len(model._overlaps)):
+    def display_overlaps(row):
+        return [sol.solver.Value(item) for item in row]
+
+
+    print([display_overlaps(row) for row in model._overlaps[n]])
+    def display_overlaps(row):
+        return [sol.solver.Value(item) for item in row]
+
+
+    print([display_overlaps(row) for row in model._task_positions[n]])
+    print()
 # %%
 
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
-#%%
+# %%
 
-ti = model._time_intervals
-d = [
-    (
-        sol.solver.Value(inte.production),
-        sol.solver.Value(inte.consumption),
-        sol.solver.Value(inte.state),
-        # sol.solver.Value(inte.last_twelve_consumption),
-    )
-    for inte in ti
-]
-import pandas as pd
+# ti = model._time_intervals
+# d = [
+#     (
+#         sol.solver.Value(inte.production),
+#         sol.solver.Value(inte.consumption),
+#         sol.solver.Value(inte.state),
+#         # sol.solver.Value(inte.last_twelve_consumption),
+#     )
+#     for inte in ti
+# ]
+# import pandas as pd
 
-e = [sol.solver.Value(ex) for ex in model._expired]
-f = pd.DataFrame(
-    d, columns=["Production", "Consumption", "State"]
-)
-f["Expired"] = e
-# f["Inventory"] = f["Production"] + f["Expired"]
-ax = f["State"].plot()
-f["Expired"].plot()
-# f["Production"].plot()
-ax.axhline(y=112519/10, lw=1, color="k")
-plt.show()
+# e = [sol.solver.Value(ex) for ex in model._expired]
+# f = pd.DataFrame(d, columns=["Production", "Consumption", "State"])
+# f["Expired"] = e
+# # f["Inventory"] = f["Production"] + f["Expired"]
+# ax = f["State"].plot()
+# f["Expired"].plot()
+# # f["Production"].plot()
+# ax.axhline(y=112519 / 10, lw=1, color="k")
+# plt.show()
+# %%
+prod = sol.cumulative_production.copy()
+prod.index = prod.index / 60
+ax = prod["LMAS"].plot()
+fig = ax.get_figure()
+ax.set_ylabel("Quantity of LMAS")
+ax.set_xlabel("Hours")
 # %%
 # f["RollingConsumption"].plot()
 
@@ -59,10 +109,15 @@ f["RollingCon"] = f["Consumption"].rolling(window=24).sum().shift(-23)
 # f["Expired"].plot()
 # f["Production"].plot()
 plt.show()
-#%%
+# %%
 mask = f["Production"] > 0
 prev_state = f["State"].iloc[mask.index[mask].values]
-prev_state + f["Production"].loc[mask] - f["Expired"].loc[mask] - f["Consumption"].loc[mask]
+(
+    prev_state
+    + f["Production"].loc[mask]
+    - f["Expired"].loc[mask]
+    - f["Consumption"].loc[mask]
+)
 # %%
 expir = f["Expired"].copy()
 expir.index /= sol._time_scale_factor
