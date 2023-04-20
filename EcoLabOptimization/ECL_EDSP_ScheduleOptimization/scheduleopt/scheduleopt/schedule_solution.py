@@ -50,7 +50,7 @@ class ScheduleSolution:
         # Named tuple to manipulate solution information.
         assigned_task_type = collections.namedtuple(
             "assigned_task_type",
-            "start job index duration min_id, machine_id consumption_rate",
+            "start job index duration min_id, machine_id consumption_rate expiration",
         )
 
         return_obj = []
@@ -91,6 +91,7 @@ class ScheduleSolution:
                             min_id=min_id,
                             machine_id=machine,
                             consumption_rate=task.consumption_rate,
+                            expiration=solver.Value(task.expired)
                         )
                     )
 
@@ -121,6 +122,7 @@ class ScheduleSolution:
                             "Operation": operation,
                             "MachineId": assigned_task.machine_id,
                             "ConsumptionRate": assigned_task.consumption_rate,
+                            "Expired": assigned_task.expiration
                         }
                     )
 
@@ -198,6 +200,7 @@ class ScheduleSolution:
     def _create_time_series(self):
         job_schedule = self.job_schedule
         job_schedule["ConsumptionRate"] = job_schedule["ConsumptionRate"].fillna(0)
+        job_schedule["Expired"] = job_schedule["Expired"].fillna(0)
         production_jobs = job_schedule.loc[
             ~job_schedule["TaskId"].isin(["recharge", "changeover"])
         ]
@@ -224,12 +227,17 @@ class ScheduleSolution:
             if isinstance(row["TaskId"], str):
                 continue
             consume = row["ConsumptionRate"]
+            expiration = row["Expired"]
 
             if consume > 0:
                 for i in range(row["Start"], row["End"]):
                     consumption_events.append(
-                        {"MIN": "LMAS", "Production": -consume, "Time": i}
+                        {"MIN": "LMAS", "Consumption": -consume, "Time": i}
                     )
+            if expiration > 0:
+                consumption_events.append(
+                    {"MIN": "LMAS", "Expiration": -expiration, "Time": row["End"]}
+                )
         consumption_events = pd.DataFrame(consumption_events)
 
         production = pd.concat([production_jobs, consumption_events])
@@ -241,26 +249,29 @@ class ScheduleSolution:
                 ignore_index=True,
             )
 
-        production = pd.pivot_table(
-            production, values="Production", index="Time", columns="MIN", aggfunc=np.sum
-        ).reset_index()
-        production = production.append(
-            pd.Series(
-                {
-                    col: self.input_data.initial_amounts.get(col, 0)
-                    for col in production.columns
-                }
-            ),
-            ignore_index=True,
-        )
-        production = production.set_index("Time").sort_index().fillna(0)
-        cumulative_production = production.cumsum()
+        production = production.fillna(0)
+        production["NetProduction"] = production["Production"] + production["Consumption"] + production["Expiration"]
+
+        production_pivot = pd.pivot_table(
+            production, values=["NetProduction", "Production", "Consumption", "Expiration"], index="Time", columns="MIN", aggfunc=np.sum
+        ).sort_index().fillna(0)
+        production_pivot.index = production_pivot.index / self._time_scale_factor
+        net_production = production_pivot["NetProduction"]
+        production = production_pivot["Production"]
+        consumption = production_pivot["Consumption"]
+        expiration = production_pivot["Expiration"]
+
+        cumulative_production = net_production.cumsum()
         cumulative_production = cumulative_production.merge(
             pd.Series(np.arange(0, cumulative_production.index.max()), name="index"),
             left_index=True,
             right_index=True,
             how="outer",
         ).fillna(method="ffill")
+
+        self.consumption = consumption
+        self.net_production = net_production
+        self.expiration = expiration
         self.production = production
         self.cumulative_production = cumulative_production
 
@@ -348,10 +359,10 @@ class ScheduleSolution:
         alt.renderers.enable("jupyterlab")
 
         data["Start"] = start_time + pd.to_timedelta(
-            data["Start"] / self._time_scale_factor, unit="hours"
+            data["Start"], unit="hours"
         )
         data["End"] = start_time + pd.to_timedelta(
-            data["End"] / self._time_scale_factor, unit="hours"
+            data["End"], unit="hours"
         )
 
         if plot_type == "jobs":
