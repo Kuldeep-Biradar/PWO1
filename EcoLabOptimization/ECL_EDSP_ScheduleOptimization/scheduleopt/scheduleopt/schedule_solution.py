@@ -243,11 +243,14 @@ class ScheduleSolution:
         production = pd.concat([production_jobs, consumption_events])
 
         # Check for initial amounts
+        initial_amounts = []
         for min_id, amount in self.input_data.initial_amounts.items():
-            production = production.append(
+            initial_amounts.append(
                 pd.Series({"MIN": min_id, "Time": 0, "Production": amount}),
                 ignore_index=True,
             )
+
+        production = pd.concat([production, *initial_amounts], ignore_index=True)
 
         production = production.fillna(0)
         production["NetProduction"] = production["Production"] + production["Consumption"] + production["Expiration"]
