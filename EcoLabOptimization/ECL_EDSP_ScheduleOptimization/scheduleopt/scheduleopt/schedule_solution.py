@@ -237,7 +237,7 @@ class ScheduleSolution:
         # Check for initial amounts
         initial_amounts = []
         for min_id, amount in self.input_data.initial_amounts.items():
-            initial_amounts = initial_amounts.append(
+            initial_amounts.append(
                 pd.Series({"MIN": min_id, "Time": 0, "Production": amount})
             )
 
