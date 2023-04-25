@@ -1343,7 +1343,7 @@ class ScheduleModel:
         #     "expiration",
         # )
         # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
-        makespan = model.NewIntVar(0, horizon, "makespan")
+        makespan = model.NewIntVar(min_horizon, horizon, "makespan")
         # model.AddDivisionEquality(excess, expiration, 1000)
 
         model.AddMaxEquality(makespan, job_ends)
