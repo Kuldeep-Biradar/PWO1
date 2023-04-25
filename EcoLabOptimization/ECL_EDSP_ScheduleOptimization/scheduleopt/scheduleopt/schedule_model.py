@@ -876,7 +876,7 @@ class ScheduleModel:
 
             prior_state = model.NewIntVar(
                 -lmas_batch * len(prod_jobs),
-                lmas_batch * len(prod_jobs) * 10,
+                lmas_batch * len(prod_jobs),
                 "prior_state",
             )
             model.Add(
