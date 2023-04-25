@@ -235,24 +235,17 @@ class ScheduleSolution:
         production = pd.concat([production_jobs, consumption_events])
 
         # Check for initial amounts
+        initial_amounts = []
         for min_id, amount in self.input_data.initial_amounts.items():
-            production = production.append(
-                pd.Series({"MIN": min_id, "Time": 0, "Production": amount}),
-                ignore_index=True,
+            production = initial_amounts.append(
+                pd.Series({"MIN": min_id, "Time": 0, "Production": amount})
             )
+
+        production = pd.concat([production, *initial_amounts], ignore_index=True)
 
         production = pd.pivot_table(
             production, values="Production", index="Time", columns="MIN", aggfunc=np.sum
         ).reset_index()
-        production = production.append(
-            pd.Series(
-                {
-                    col: self.input_data.initial_amounts.get(col, 0)
-                    for col in production.columns
-                }
-            ),
-            ignore_index=True,
-        )
         production = production.set_index("Time").sort_index().fillna(0)
         cumulative_production = production.cumsum()
         cumulative_production = cumulative_production.merge(
