@@ -246,8 +246,7 @@ class ScheduleSolution:
         initial_amounts = []
         for min_id, amount in self.input_data.initial_amounts.items():
             initial_amounts.append(
-                pd.Series({"MIN": min_id, "Time": 0, "Production": amount}),
-                ignore_index=True,
+                pd.Series({"MIN": min_id, "Time": 0, "Production": amount})
             )
 
         production = pd.concat([production, *initial_amounts], ignore_index=True)
