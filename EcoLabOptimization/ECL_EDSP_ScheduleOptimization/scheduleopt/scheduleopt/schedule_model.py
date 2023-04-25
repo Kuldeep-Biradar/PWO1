@@ -556,6 +556,9 @@ class ScheduleModel:
         full_consumption = sum([task.consumption for task in consume_tasks])
         min_prod_jobs = math.ceil(full_consumption / self._batches.get("LMAS"))
 
+        for n in range(min_prod_jobs):
+            model.Add(prod_jobs[n].is_present == 1)
+
         num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
         model.Add(num_present_prod_jobs >= min_prod_jobs)
 
@@ -710,7 +713,7 @@ class ScheduleModel:
                         ]
                     )
                     == 1
-                )
+                ).OnlyEnforceIf(prod_job.is_present)
                 all_strictly_before.append(strictly_before)
 
                 strictly_before_sum = sum(
@@ -1316,9 +1319,9 @@ class ScheduleModel:
 
         # # Force all jobs to be non-consumption products to be present
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
-        job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
+        # job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
         # job_present = [job.is_present for job in jobs]
-        model.Add(sum(job_present) == len(job_present))
+        # model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
         job_ends = [job.tasks[-1].end for job in jobs if job.tasks[-1].min_id != "LMAS"]
