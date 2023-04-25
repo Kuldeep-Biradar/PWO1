@@ -875,8 +875,8 @@ class ScheduleModel:
             tasks_positions.append(job_tasks_positions)
 
             prior_state = model.NewIntVar(
-                -lmas_batch * len(prod_jobs),
-                lmas_batch * len(prod_jobs),
+                -lmas_batch * 3,
+                lmas_batch * 3,
                 "prior_state",
             )
             model.Add(
@@ -890,7 +890,7 @@ class ScheduleModel:
             prior_states.append(prior_state)
 
             future_state = model.NewIntVar(
-                -lmas_batch * len(prod_jobs), lmas_batch * len(prod_jobs), "prior_state"
+                -lmas_batch * 3, lmas_batch * 3, "prior_state"
             )
             model.Add(
                 future_state
@@ -905,11 +905,11 @@ class ScheduleModel:
             future_states.append(future_state)
 
             expiration = model.NewIntVar(
-                -lmas_batch * len(prod_jobs),
-                lmas_batch * len(prod_jobs),
+                -lmas_batch * 3,
+                lmas_batch * 3,
                 "expiration",
             )
-            consume = model.NewIntVar(0, lmas_batch * len(prod_jobs), "consume")
+            consume = model.NewIntVar(0, lmas_batch * 3, "consume")
             model.Add(consume == sum(current_consumptions)).OnlyEnforceIf(
                 job.is_present
             )
