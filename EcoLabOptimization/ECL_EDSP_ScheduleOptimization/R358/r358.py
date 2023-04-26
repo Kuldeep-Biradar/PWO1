@@ -64,6 +64,9 @@ for n in range(len(model._overlaps)):
 
     print([display_overlaps(row) for row in model._task_positions[n]])
     print()
+
+#%%
+[sol.solver.Value(job.is_present) for job in sol.jobs if job.min_id=="LMAS"]
 # %%
 
 jobs_chart = sol.visualize_jobs()
@@ -94,7 +97,7 @@ jobs_chart
 # plt.show()
 # %%
 prod = sol.cumulative_production.copy()
-prod.index = prod.index / 60
+# prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
 fig = ax.get_figure()
 ax.set_ylabel("Quantity of LMAS")

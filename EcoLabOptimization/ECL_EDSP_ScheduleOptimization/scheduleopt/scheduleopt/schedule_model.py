@@ -526,7 +526,16 @@ class ScheduleModel:
             #     prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value)
             # )
             if prev_prod_job is not None:
-                model.Add(prev_prod_job.tasks[0].start < prod_job.tasks[0].start)
+                both_present = model.NewBoolVar("both_present")
+                model.Add(
+                    sum([prev_prod_job.is_present, prod_job.is_present]) == 2
+                ).OnlyEnforceIf(both_present)
+                model.Add(
+                    sum([prev_prod_job.is_present, prod_job.is_present]) != 2
+                ).OnlyEnforceIf(both_present.Not())
+                model.Add(
+                    prev_prod_job.tasks[0].start < prod_job.tasks[0].start
+                ).OnlyEnforceIf(both_present)
             prev_prod_job = prod_job
 
         max_consumption = sum([task.consumption for task in consume_tasks])
@@ -557,8 +566,10 @@ class ScheduleModel:
         min_prod_jobs = math.ceil(full_consumption / self._batches.get("LMAS"))
 
         for n in range(min_prod_jobs):
+            # for n in range(len(prod_jobs) - 1):
             model.Add(prod_jobs[n].is_present == 1)
 
+        # model.Add(prod_jobs[-1].is_present == 0)
         num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
         model.Add(num_present_prod_jobs >= min_prod_jobs)
 
@@ -595,26 +606,44 @@ class ScheduleModel:
                     "past_expire",
                 )
 
+                both_present = model.NewBoolVar("both_present")
+                model.Add(
+                    sum([prod_job.is_present, other_prod_job.is_present]) == 2
+                ).OnlyEnforceIf(both_present)
+                model.Add(
+                    sum([prod_job.is_present, other_prod_job.is_present]) != 2
+                ).OnlyEnforceIf(both_present.Not())
+
                 after_other_job = model.NewBoolVar("prod_job_before")
                 model.Add(
                     prod_job.tasks[0].start > other_prod_job.tasks[0].start
-                ).OnlyEnforceIf(after_other_job)
+                ).OnlyEnforceIf([after_other_job, both_present])
                 model.Add(
                     prod_job.tasks[0].start <= other_prod_job.tasks[0].start
-                ).OnlyEnforceIf(after_other_job.Not())
+                ).OnlyEnforceIf([after_other_job.Not(), both_present])
 
                 model.Add(past_expiration == 0).OnlyEnforceIf(after_other_job.Not())
                 model.Add(past_expiration == expirations[k]).OnlyEnforceIf(
-                    after_other_job
+                    [after_other_job, both_present]
                 )
 
                 model.Add(future_expiration == expirations[k]).OnlyEnforceIf(
-                    after_other_job.Not()
+                    [after_other_job.Not(), both_present]
                 )
-                model.Add(future_expiration == 0).OnlyEnforceIf(after_other_job)
+                model.Add(future_expiration == 0).OnlyEnforceIf(
+                    [after_other_job, both_present]
+                )
+                after_other_job_and_both_present = model.NewBoolVar("both_present")
+                model.Add(sum([after_other_job, both_present]) == 2).OnlyEnforceIf(
+                    after_other_job_and_both_present
+                )
+                model.Add(sum([after_other_job, both_present]) != 2).OnlyEnforceIf(
+                    after_other_job_and_both_present.Not()
+                )
+
                 prior_expirations.append(past_expiration)
                 future_expirations.append(future_expiration)
-                prior_production.append(after_other_job)
+                prior_production.append(after_other_job_and_both_present)
 
             num_prior_jobs = sum(prior_production)
             num_subsequent_jobs = num_present_prod_jobs - sum(prior_production)
@@ -1324,10 +1353,15 @@ class ScheduleModel:
         # model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
-        job_ends = [job.tasks[-1].end for job in jobs if job.tasks[-1].min_id != "LMAS"]
-        job_starts = [
-            job.tasks[0].start for job in jobs if job.tasks[0].min_id != "LMAS"
-        ]
+        job_ends = [job.tasks[-1].end for job in jobs]
+        prod_jobs = [job for job in jobs if job.tasks[0].min_id == "LMAS"]
+
+        num_prod_jobs = model.NewIntVar(0, len(prod_jobs), "number_of_prod_jobs")
+        model.Add(num_prod_jobs == sum([job.is_present for job in prod_jobs]))
+        num_prod_jobs_x100 = model.NewIntVar(
+            0, len(prod_jobs) * 100, "num_prod_jobs_x100"
+        )
+        model.AddMultiplicationEquality(num_prod_jobs_x100, [num_prod_jobs, 100])
 
         self._add_no_overlap_condition(model, jobs)
 
