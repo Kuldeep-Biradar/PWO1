@@ -1328,7 +1328,13 @@ class ScheduleModel:
             if len(intervals) > 1:
                 model.AddNoOverlap(intervals)
 
-    def solve_least_time_schedule(self, max_time_in_seconds=45, number_of_search_workers=8, verbose=False):
+    def solve_least_time_schedule(
+        self,
+        enforce_consumption_constraint=True,
+        max_time_in_seconds=45,
+        number_of_search_workers=8,
+        verbose=False,
+    ):
         """Minimal jobshop problem."""
 
         jobs_data = self._get_required_jobs()
@@ -1343,7 +1349,8 @@ class ScheduleModel:
         jobs = self._create_job_intervals(model, jobs_data, horizon)
 
         # Check for consumption
-        self._create_consumption_constraints(model, jobs, horizon)
+        if enforce_consumption_constraint:
+            self._create_consumption_constraints(model, jobs, horizon)
         # self._require_initial_production_jobs(model, jobs)
 
         # # Force all jobs to be non-consumption products to be present
