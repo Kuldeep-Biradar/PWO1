@@ -569,6 +569,9 @@ class ScheduleModel:
             # for n in range(len(prod_jobs) - 1):
             model.Add(prod_jobs[n].is_present == 1)
 
+        for n in range(min_prod_jobs + 1, len(prod_jobs)):
+            model.AddImplication(prod_jobs[n].is_present.Not(), prod_jobs[n + 1].is_present.Not())
+
         # model.Add(prod_jobs[-1].is_present == 0)
         # num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
         # model.Add(num_present_prod_jobs >= min_prod_jobs)
