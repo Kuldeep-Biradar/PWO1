@@ -1,4 +1,5 @@
 import collections
+import math
 from datetime import datetime
 from typing import List
 from copy import deepcopy
@@ -32,12 +33,17 @@ class ScheduleSolution:
         self.status = status
         self.jobs = jobs
         self.solver = solver
-        self._process_solution()
         self._time_scale_factor = time_scale_factor
+        self._process_solution()
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             self.machine_stats = self._calculate_machine_stats()
             self.job_data = self._aggregate_job_data()
             self._create_time_series()
+
+    def __add__(self, other):
+        max_end_time = self.job_schedule["End"].max()
+        other.job_schedule["Start"] += max_end_time
+        other.job_schedule["End"] += max_end_time
 
     def _process_solution(
         self,
@@ -91,7 +97,7 @@ class ScheduleSolution:
                             min_id=min_id,
                             machine_id=machine,
                             consumption_rate=task.consumption_rate,
-                            expiration=solver.Value(task.expired)
+                            expiration=solver.Value(task.expired),
                         )
                     )
 
@@ -122,7 +128,7 @@ class ScheduleSolution:
                             "Operation": operation,
                             "MachineId": assigned_task.machine_id,
                             "ConsumptionRate": assigned_task.consumption_rate,
-                            "Expired": assigned_task.expiration
+                            "Expired": assigned_task.expiration,
                         }
                     )
 
@@ -177,7 +183,7 @@ class ScheduleSolution:
                     rows.append(row)
                 return pd.DataFrame(rows)
 
-            self.job_schedule = (
+            self._job_schedule = (
                 job_schedule.groupby("MachineId", as_index=False)
                 .apply(fix_intervals)
                 .reset_index(drop=True)
@@ -197,8 +203,15 @@ class ScheduleSolution:
 
         self.solution_summary = solution_text
 
+    @property
+    def job_schedule(self):
+        schedule = self._job_schedule.copy()
+        schedule["Start"] /= self._time_scale_factor
+        schedule["End"] /= self._time_scale_factor
+        return schedule
+
     def _create_time_series(self):
-        job_schedule = self.job_schedule
+        job_schedule = self._job_schedule
         job_schedule["ConsumptionRate"] = job_schedule["ConsumptionRate"].fillna(0)
         job_schedule["Expired"] = job_schedule["Expired"].fillna(0)
         production_jobs = job_schedule.loc[
@@ -252,11 +265,23 @@ class ScheduleSolution:
         production = pd.concat([production, *initial_amounts], ignore_index=True)
 
         production = production.fillna(0)
-        production["NetProduction"] = production["Production"] + production["Consumption"] + production["Expiration"]
+        production["NetProduction"] = (
+            production["Production"]
+            + production["Consumption"]
+            + production["Expiration"]
+        )
 
-        production_pivot = pd.pivot_table(
-            production, values=["NetProduction", "Production", "Consumption", "Expiration"], index="Time", columns="MIN", aggfunc=np.sum
-        ).sort_index().fillna(0)
+        production_pivot = (
+            pd.pivot_table(
+                production,
+                values=["NetProduction", "Production", "Consumption", "Expiration"],
+                index="Time",
+                columns="MIN",
+                aggfunc=np.sum,
+            )
+            .sort_index()
+            .fillna(0)
+        )
         production_pivot.index = production_pivot.index / self._time_scale_factor
         net_production = production_pivot["NetProduction"]
         production = production_pivot["Production"]
@@ -360,12 +385,8 @@ class ScheduleSolution:
 
         alt.renderers.enable("jupyterlab")
 
-        data["Start"] = start_time + pd.to_timedelta(
-            data["Start"], unit="hours"
-        )
-        data["End"] = start_time + pd.to_timedelta(
-            data["End"], unit="hours"
-        )
+        data["Start"] = start_time + pd.to_timedelta(data["Start"], unit="hours")
+        data["End"] = start_time + pd.to_timedelta(data["End"], unit="hours")
 
         if plot_type == "jobs":
             return (
