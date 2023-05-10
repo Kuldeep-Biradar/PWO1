@@ -1328,7 +1328,7 @@ class ScheduleModel:
             if len(intervals) > 1:
                 model.AddNoOverlap(intervals)
 
-    def solve_least_time_schedule(self, max_time_in_seconds=45, verbose=False):
+    def solve_least_time_schedule(self, max_time_in_seconds=45, number_of_search_workers=8, verbose=False):
         """Minimal jobshop problem."""
 
         jobs_data = self._get_required_jobs()
@@ -1356,12 +1356,12 @@ class ScheduleModel:
         job_ends = [job.tasks[-1].end for job in jobs]
         prod_jobs = [job for job in jobs if job.tasks[0].min_id == "LMAS"]
 
-        num_prod_jobs = model.NewIntVar(0, len(prod_jobs), "number_of_prod_jobs")
-        model.Add(num_prod_jobs == sum([job.is_present for job in prod_jobs]))
-        num_prod_jobs_x100 = model.NewIntVar(
-            0, len(prod_jobs) * 100, "num_prod_jobs_x100"
-        )
-        model.AddMultiplicationEquality(num_prod_jobs_x100, [num_prod_jobs, 100])
+        # num_prod_jobs = model.NewIntVar(0, len(prod_jobs), "number_of_prod_jobs")
+        # model.Add(num_prod_jobs == sum([job.is_present for job in prod_jobs]))
+        # num_prod_jobs_x100 = model.NewIntVar(
+        #     0, len(prod_jobs) * 100, "num_prod_jobs_x100"
+        # )
+        # model.AddMultiplicationEquality(num_prod_jobs_x100, [num_prod_jobs, 100])
 
         self._add_no_overlap_condition(model, jobs)
 
@@ -1391,7 +1391,10 @@ class ScheduleModel:
         solver = cp_model.CpSolver()
         if max_time_in_seconds is not None:
             solver.parameters.max_time_in_seconds = max_time_in_seconds
-        solver.parameters.num_search_workers = cpu_count()
+        if number_of_search_workers is None:
+            solver.parameters.num_search_workers = cpu_count()
+        else:
+            solver.parameters.num_search_workers = number_of_search_workers
         if verbose:
             solver.parameters.log_search_progress = True
         solver.parameters.random_seed = 1
