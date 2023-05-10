@@ -570,8 +570,8 @@ class ScheduleModel:
             model.Add(prod_jobs[n].is_present == 1)
 
         # model.Add(prod_jobs[-1].is_present == 0)
-        num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
-        model.Add(num_present_prod_jobs >= min_prod_jobs)
+        # num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
+        # model.Add(num_present_prod_jobs >= min_prod_jobs)
 
         for n, prod_job in enumerate(prod_jobs):
             prod_window_start = model.NewIntVar(
@@ -1355,8 +1355,8 @@ class ScheduleModel:
 
         # # Force all jobs to be non-consumption products to be present
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
-        # job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
-        job_present = [job.is_present for job in jobs]
+        job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
+        # job_present = [job.is_present for job in jobs]
         model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
