@@ -103,10 +103,13 @@ class ScheduleSolution:
                         continue
 
                     # Used for change over intervals
-                    if "changeover" in task.end.Name():
-                        task_id = "changeover"
-                    elif "recharge" in task.end.Name():
-                        task_id = "recharge"
+                    try:
+                        if "changeover" in task.end.Name():
+                            task_id = "changeover"
+                        elif "recharge" in task.end.Name():
+                            task_id = "recharge"
+                    except:
+                        pass
                     assigned_jobs[machine].append(
                         assigned_task_type(
                             start=solver.Value(task.start),
@@ -227,6 +230,7 @@ class ScheduleSolution:
         schedule = self._job_schedule.copy()
         schedule["Start"] /= self._time_scale_factor
         schedule["End"] /= self._time_scale_factor
+        schedule["ConsumptionRate"] *= (self._time_scale_factor/60)
         return schedule
 
     def _create_time_series(self):

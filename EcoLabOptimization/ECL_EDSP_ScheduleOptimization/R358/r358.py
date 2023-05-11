@@ -20,8 +20,23 @@ inputs["forecast"] = inputs["forecast2"]
 model = ScheduleModel(inputs, time_scale_factor=4)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
-sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=False, verbose=True)
+sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=True, verbose=True)
+# %%
 
+jobs_chart = sol.visualize_jobs()
+machines_chart = sol.visualize_machines()
+jobs_chart
+
+#%%
+model = ScheduleModel(inputs, time_scale_factor=4, previous_schedule=sol.job_schedule)
+# %%
+# sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
+sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=True, verbose=True)
+# %%
+
+jobs_chart = sol.visualize_jobs()
+machines_chart = sol.visualize_machines()
+jobs_chart
 # %%
 expiration = pd.DataFrame(
     [
@@ -47,8 +62,6 @@ expiration = pd.DataFrame(
 expiration
 # %%
 sol.production
-
-
 
 
 # %%
