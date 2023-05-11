@@ -41,9 +41,28 @@ class ScheduleSolution:
             self._create_time_series()
 
     def __add__(self, other):
-        max_end_time = self.job_schedule["End"].max()
-        other.job_schedule["Start"] += max_end_time
-        other.job_schedule["End"] += max_end_time
+        job_schedule = self.job_schedule.copy().sort_values("Start")
+        while job_schedule.iloc[-1]["Expired"] == self.input_data.batches["LMAS"]:
+            job_schedule = job_schedule.iloc[:-1]
+        # remove lmas jobs that are expired
+        other_job_schedule = other.job_schedule.copy().sort_values("Start")
+        while (
+            other_job_schedule.iloc[-1]["Expired"] == other.input_data.batches["LMAS"]
+        ):
+            other_job_schedule = other_job_schedule.iloc[:-1]
+
+        max_end_time = max(
+            job_schedule.iloc[-1]["End"], other_job_schedule.iloc[-1]["End"]
+        )
+        other_job_schedule["Start"] += max_end_time
+        other_job_schedule["End"] += max_end_time
+        combined_job_schedule = pd.concat([job_schedule, other_job_schedule])
+        copy = deepcopy(self)
+        copy._job_schedule = combined_job_schedule
+        copy._time_scale_factor = 1
+        copy.machine_stats = copy._calculate_machine_stats()
+        copy.job_data = copy._aggregate_job_data()
+        copy._create_time_series()
 
     def _process_solution(
         self,
@@ -263,6 +282,8 @@ class ScheduleSolution:
             )
 
         production = pd.concat([production, *initial_amounts], ignore_index=True)
+        if "Expiration" not in production.columns:
+            production["Expiration"] = 0
 
         production = production.fillna(0)
         production["NetProduction"] = (
