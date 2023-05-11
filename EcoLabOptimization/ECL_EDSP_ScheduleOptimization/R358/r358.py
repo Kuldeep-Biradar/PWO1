@@ -7,12 +7,12 @@ import json
 import numpy as np
 
 
-with open("input_lmas_ramp.json") as f:
+with open("input_lmas_ramp_updated (1)") as f:
     inputs = json.load(f)
 # inputs["forecast"] = [["M07A5", 60361, 744]]
 # inputs["forecast"] = [["B05Y5", 5461, 744]]
 # inputs["forecast"] = [["M07A5_2", 19461, 744]]
-inputs["forecast"] = inputs["forecast2"]
+inputs["forecast"] = inputs["forecastd"]
 # print(inputs["forecast"])
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
@@ -27,6 +27,13 @@ jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
 
+#%%
+prod = sol.cumulative_production.copy()
+# prod.index = prod.index / 60
+ax = prod["LMAS"].plot()
+fig = ax.get_figure()
+ax.set_ylabel("Quantity of LMAS")
+ax.set_xlabel("Hours")
 #%%
 model = ScheduleModel(inputs, time_scale_factor=4, previous_schedule=sol.job_schedule)
 # %%

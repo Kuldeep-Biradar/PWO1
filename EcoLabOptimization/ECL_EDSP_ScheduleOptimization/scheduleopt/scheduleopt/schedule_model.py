@@ -633,7 +633,8 @@ class ScheduleModel:
             expirations.append(
                 model.NewIntVar(
                     0,
-                    lmas_batch * len(prod_jobs),
+                    lmas_batch,
+                    # lmas_batch * len(prod_jobs),
                     "expiration_value",
                 )
             )
@@ -665,7 +666,7 @@ class ScheduleModel:
 
         for n, prod_job in enumerate(prod_jobs):
             prod_window_start = model.NewIntVar(
-                -horizon - twelve_hours, horizon + twelve_hours, "prod_window_end"
+                -horizon - twelve_hours, horizon + twelve_hours, "prod_window_start"
             )
             prod_window_end = model.NewIntVar(
                 -horizon - twelve_hours, horizon + twelve_hours, "prod_window_end"
@@ -1445,18 +1446,19 @@ class ScheduleModel:
 
         # # Force all jobs to be non-consumption products to be present
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
-        # job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
-        job_present = [job.is_present for job in jobs]
+        job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
+        # job_present = [job.is_present for job in jobs]
         model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
 
         job_ends = [job.tasks[-1].end for job in jobs]
         prod_ends = [job.tasks[-1].end for job in jobs if job.tasks[0].min_id == "LMAS"]
-        non_prod_ends = [job.tasks[-1].end for job in jobs if job.tasks[0].min_id != "LMAS"]
+        non_prod_ends = [
+            job.tasks[-1].end for job in jobs if job.tasks[0].min_id != "LMAS"
+        ]
 
         self._add_no_overlap_condition(model, jobs)
-
 
         # Makespan objective.
         lmas_batch = self._batches.get("LMAS")
@@ -1466,12 +1468,12 @@ class ScheduleModel:
         #     "expiration",
         # )
         # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
-        makespan_prod = model.NewIntVar(min_horizon, horizon, "makespan")
+        makespan_prod = model.NewIntVar(0, horizon, "makespan")
         model.AddMaxEquality(makespan_prod, prod_ends)
         makespan_non_prod = model.NewIntVar(min_horizon, horizon, "makespan")
         model.AddMaxEquality(makespan_non_prod, non_prod_ends)
 
-        makespan = model.NewIntVar(min_horizon*2, horizon*2, "makespan")
+        makespan = model.NewIntVar(0, horizon * 2, "makespan")
         model.Add(makespan == makespan_prod + makespan_non_prod)
         model.Minimize(makespan)
 
