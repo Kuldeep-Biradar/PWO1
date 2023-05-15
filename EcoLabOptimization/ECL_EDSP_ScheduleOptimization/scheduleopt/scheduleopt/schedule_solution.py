@@ -408,7 +408,7 @@ class ScheduleSolution:
             today = datetime.now()
             start_time = datetime(today.year, today.month, 1)
 
-        alt.renderers.enable("jupyterlab")
+        # alt.renderers.enable("jupyterlab")
 
         data["Start"] = start_time + pd.to_timedelta(data["Start"], unit="hours")
         data["End"] = start_time + pd.to_timedelta(data["End"], unit="hours")
