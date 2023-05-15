@@ -1422,13 +1422,18 @@ class ScheduleModel:
         enforce_consumption_constraint=True,
         max_time_in_seconds=45,
         number_of_search_workers=8,
+        max_horizon=None,
         verbose=False,
     ):
         """Minimal jobshop problem."""
 
         jobs_data = self._get_required_jobs()
 
-        min_horizon, horizon = self._get_max_horizon(jobs_data)
+        if max_horizon is None:
+            min_horizon, horizon = self._get_max_horizon(jobs_data)
+        else:
+            min_horizon = 0
+            horizon = max_horizon
 
         # Create the model.
         model = cp_model.CpModel()
@@ -1446,8 +1451,8 @@ class ScheduleModel:
 
         # # Force all jobs to be non-consumption products to be present
         jobs = self._create_shutdown_jobs(model, jobs, horizon)
-        job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
-        # job_present = [job.is_present for job in jobs]
+        # job_present = [job.is_present for job in jobs if job.min_id in self._forecasts]
+        job_present = [job.is_present for job in jobs]
         model.Add(sum(job_present) == len(job_present))
 
         self._create_changeover_intervals_task(model, horizon, jobs)
