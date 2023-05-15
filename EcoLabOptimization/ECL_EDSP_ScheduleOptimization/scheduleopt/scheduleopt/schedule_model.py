@@ -119,6 +119,9 @@ class ScheduleModel:
             self._previous_schedule["Start"] *= self._time_scale_factor
             self._previous_schedule["End"] *= self._time_scale_factor
             self._previous_schedule["ConsumptionRate"] *= 60 / self._time_scale_factor
+            non_prod_max = self._previous_schedule.loc[self._previous_schedule["MIN"] != "LMAS"]["End"].max()
+            self._previous_schedule = self._previous_schedule.loc[self._previous_schedule["End"] <= non_prod_max]
+
 
         # Scale forecasts from hours delivered to minutes
         time_scale_factor = self._time_scale_factor  # input of hours
@@ -250,7 +253,7 @@ class ScheduleModel:
             for item in self._scheduled_shutdown:
                 horizon += item["duration"]
                 min_horizon += item["duration"]
-        return int(math.floor(min_horizon)), int(math.ceil(horizon)) * 3
+        return int(math.floor(min_horizon)), int(math.ceil(horizon))
 
     def _create_job_intervals(
         self, model, jobs_data, horizon, job_id_min=0, previous_schedule=None
@@ -278,8 +281,6 @@ class ScheduleModel:
         total_leftover = 0
         if previous_schedule is not None:
             for n, (prev_job_id, df) in enumerate(previous_schedule.groupby("JobId")):
-                if df["MIN"].iloc[0] == "LMAS":
-                    continue
 
                 job_consume_total = 0
                 product_jobs = []
