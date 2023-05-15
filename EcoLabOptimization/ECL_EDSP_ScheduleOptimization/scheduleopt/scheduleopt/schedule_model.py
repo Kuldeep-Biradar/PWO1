@@ -287,7 +287,7 @@ class ScheduleModel:
                 job_is_present = model.NewBoolVar(f"job_is_present_j{job_id}")
                 model.Add(job_is_present == 1)
                 for n, row in df.iterrows():
-                    if row["MIN"] == "LMAS" or isinstance(row["TaskId"], str):
+                    if isinstance(row["TaskId"], str):
                         continue
                     min_id = row["MIN"]
                     task_id = int(row["TaskId"])
