@@ -1475,7 +1475,7 @@ class ScheduleModel:
         # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
         makespan_prod = model.NewIntVar(0, horizon, "makespan")
         model.AddMaxEquality(makespan_prod, prod_ends)
-        makespan_non_prod = model.NewIntVar(min_horizon, horizon, "makespan")
+        makespan_non_prod = model.NewIntVar(0, horizon, "makespan")
         model.AddMaxEquality(makespan_non_prod, non_prod_ends)
 
         # makespan = model.NewIntVar(0, horizon * 2, "makespan")
