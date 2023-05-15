@@ -1478,9 +1478,9 @@ class ScheduleModel:
         makespan_non_prod = model.NewIntVar(min_horizon, horizon, "makespan")
         model.AddMaxEquality(makespan_non_prod, non_prod_ends)
 
-        makespan = model.NewIntVar(0, horizon * 2, "makespan")
-        model.Add(makespan == makespan_prod + makespan_non_prod)
-        model.Minimize(makespan)
+        # makespan = model.NewIntVar(0, horizon * 2, "makespan")
+        # model.Add(makespan == makespan_prod + makespan_non_prod)
+        model.Minimize(makespan_non_prod)
 
         # Creates the solver and solve.
         solver = cp_model.CpSolver()
