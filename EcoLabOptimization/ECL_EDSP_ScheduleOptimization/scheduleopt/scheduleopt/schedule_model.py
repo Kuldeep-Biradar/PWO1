@@ -253,7 +253,7 @@ class ScheduleModel:
             for item in self._scheduled_shutdown:
                 horizon += item["duration"]
                 min_horizon += item["duration"]
-        return int(math.floor(min_horizon)), int(math.ceil(horizon))
+        return int(math.floor(min_horizon)), int(math.ceil(horizon)) * 5
 
     def _create_job_intervals(
         self, model, jobs_data, horizon, job_id_min=0, previous_schedule=None
@@ -281,6 +281,8 @@ class ScheduleModel:
         total_leftover = 0
         if previous_schedule is not None:
             for n, (prev_job_id, df) in enumerate(previous_schedule.groupby("JobId")):
+                if df.iloc[0]["MIN"] == "LMAS":
+                    continue
 
                 job_consume_total = 0
                 product_jobs = []
@@ -288,10 +290,11 @@ class ScheduleModel:
                 job_is_present = model.NewBoolVar(f"job_is_present_j{job_id}")
                 model.Add(job_is_present == 1)
                 for n, row in df.iterrows():
-                    if isinstance(row["TaskId"], str):
+                    try:
+                        task_id = int(row["TaskId"])
+                    except:
                         continue
                     min_id = row["MIN"]
-                    task_id = int(row["TaskId"])
                     start = int(row["Start"])
                     end = int(row["End"])
                     machine_id = int(row["MachineId"])
