@@ -116,12 +116,16 @@ class ScheduleModel:
         """Generate initial model inputs and reformat as necessary"""
 
         if self._previous_schedule is not None:
+            self._previous_schedule = self._previous_schedule.sort_values("Start")
             self._previous_schedule["Start"] *= self._time_scale_factor
             self._previous_schedule["End"] *= self._time_scale_factor
             self._previous_schedule["ConsumptionRate"] *= 60 / self._time_scale_factor
-            non_prod_max = self._previous_schedule.loc[self._previous_schedule["MIN"] != "LMAS"]["End"].max()
-            self._previous_schedule = self._previous_schedule.loc[self._previous_schedule["End"] <= non_prod_max]
-
+            non_prod_max = self._previous_schedule.loc[
+                self._previous_schedule["MIN"] != "LMAS"
+            ]["End"].max()
+            self._previous_schedule = self._previous_schedule.loc[
+                self._previous_schedule["End"] <= non_prod_max
+            ]
 
         # Scale forecasts from hours delivered to minutes
         time_scale_factor = self._time_scale_factor  # input of hours
@@ -132,7 +136,7 @@ class ScheduleModel:
             forecast[item[0]].append(item[1:])
         self._forecasts = forecast
 
-        self._batches = self._input_data.batches
+        self._batches = deepcopy(self._input_data.batches)
 
         machine_names = self._input_data.machine_names
         if machine_names is None:
@@ -163,6 +167,7 @@ class ScheduleModel:
         self._initial_amounts = self._input_data.initial_amounts
 
         # Scale consumption rates by time_scale_factor
+        min_consumption_rate = float("inf")
         for min_id, job_data in self._jobs.items():
             for task in job_data:
                 for alt_task in task:
@@ -171,6 +176,24 @@ class ScheduleModel:
                         alt_task[4] = math.ceil(
                             int(alt_task[4] * 60 / time_scale_factor)
                         )
+                        min_consumption_rate = min(min_consumption_rate, alt_task[4])
+
+        # scale LMAS batches and consumption by smallest consumption rate in data
+        if self._previous_schedule is not None:
+            min_consumption_rate = min(
+                self._previous_schedule["Consumption Rate"].min(), min_consumption_rate
+            )
+
+        if min_consumption_rate == float("inf"):
+            min_consumption_rate = 1
+
+        self._batches["LMAS"] = math.floor(self._batches["LMAS"] / min_consumption_rate)
+
+        for min_id, job_data in self._jobs.items():
+            for task in job_data:
+                for alt_task in task:
+                    if len(alt_task) == 5:
+                        alt_task[4] = math.ceil(alt_task[4] / min_consumption_rate)
 
         if "LMAS" in self._batches:
             self._batches["LMAS"] = math.floor(self._batches["LMAS"])
@@ -253,7 +276,7 @@ class ScheduleModel:
             for item in self._scheduled_shutdown:
                 horizon += item["duration"]
                 min_horizon += item["duration"]
-        return int(math.floor(min_horizon)), int(math.ceil(horizon)) * 5
+        return int(math.floor(min_horizon)), int(math.ceil(horizon))
 
     def _create_job_intervals(
         self, model, jobs_data, horizon, job_id_min=0, previous_schedule=None
@@ -281,8 +304,8 @@ class ScheduleModel:
         total_leftover = 0
         if previous_schedule is not None:
             for n, (prev_job_id, df) in enumerate(previous_schedule.groupby("JobId")):
-                if df.iloc[0]["MIN"] == "LMAS":
-                    continue
+                # if df.iloc[0]["MIN"] == "LMAS":
+                #     continue
 
                 job_consume_total = 0
                 product_jobs = []
@@ -321,28 +344,28 @@ class ScheduleModel:
 
                     ## TODO: Does not work with alt reactor tasks right now
                     if task_consume_rate:
-                        # Currently only support LMAS consumption
-                        k = "LMAS"
-                        # if current_leftover > consumption, no consumption needed
-                        production_batch_size = self._batches.get(k)
+                        #     # Currently only support LMAS consumption
+                        #     k = "LMAS"
+                        #     # if current_leftover > consumption, no consumption needed
+                        #     production_batch_size = self._batches.get(k)
                         task_consume_total = task_consume_rate * duration
-                        job_consume_total += task_consume_total
-                        job_id += 1
+                    #     job_consume_total += task_consume_total
+                    #     job_id += 1
 
-                        # task will require one or more consume product production job
-                        production_total_batches = math.ceil(
-                            (task_consume_total) / production_batch_size
-                        )
-                        production_jobs_data = [
-                            self._jobs.get(k)
-                        ] * production_total_batches
-                        production_jobs = self._create_job_intervals(
-                            model, production_jobs_data, horizon, job_id
-                        )
-                        # set outer job id
-                        job_id = production_jobs[-1].job_id
+                    #     # task will require one or more consume product production job
+                    #     production_total_batches = math.ceil(
+                    #         (task_consume_total) / production_batch_size
+                    #     )
+                    #     production_jobs_data = [
+                    #         self._jobs.get(k)
+                    #     ] * production_total_batches
+                    #     production_jobs = self._create_job_intervals(
+                    #         model, production_jobs_data, horizon, job_id
+                    #     )
+                    #     # set outer job id
+                    #     job_id = production_jobs[-1].job_id
 
-                        product_jobs += production_jobs
+                    #     product_jobs += production_jobs
                     else:
                         task_consume_total = 0
                     task_interval.consumption = task_consume_total
@@ -627,7 +650,7 @@ class ScheduleModel:
                 ).OnlyEnforceIf(both_present)
             prev_prod_job = prod_job
 
-        max_consumption = sum([task.consumption for task in consume_tasks])
+        max_consumption = max([task.consumption for task in consume_tasks])
         twelve_hours = 12 * self._time_scale_factor
         lmas_batch = int(self._batches.get("LMAS"))
         real_lmas_batch = int(self._batches.get("LMAS"))
@@ -690,12 +713,12 @@ class ScheduleModel:
             for k, other_prod_job in enumerate(prod_jobs):
                 future_expiration = model.NewIntVar(
                     0,
-                    lmas_batch * len(prod_jobs),
+                    lmas_batch,
                     "future_expire",
                 )
                 past_expiration = model.NewIntVar(
                     0,
-                    lmas_batch * len(prod_jobs),
+                    lmas_batch,
                     "past_expire",
                 )
 
