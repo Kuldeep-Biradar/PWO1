@@ -181,7 +181,7 @@ class ScheduleModel:
         # scale LMAS batches and consumption by smallest consumption rate in data
         if self._previous_schedule is not None:
             min_consumption_rate = min(
-                self._previous_schedule["Consumption Rate"].min(), min_consumption_rate
+                self._previous_schedule["ConsumptionRate"].min(), min_consumption_rate
             )
 
         if min_consumption_rate == float("inf"):
