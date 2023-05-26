@@ -82,7 +82,8 @@ class ScheduleModel:
         if cleaning_matrix is None:
             r358 = files("scheduleopt.data").joinpath("r358-cleaning-matrix.csv")
             r368 = files("scheduleopt.data").joinpath("r368-cleaning-matrix.csv")
-            cleaning_matrix = {0: r358, 5: r368}
+            r359 = files("scheduleopt.data").joinpath("r359-cleaning-matrix.csv")
+            cleaning_matrix = {0: r358, 5: r368, 8:r359}
 
         for k, v in cleaning_matrix.items():
             if isinstance(v, (str, Path)):
