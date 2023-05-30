@@ -7,20 +7,22 @@ import json
 import numpy as np
 
 
-with open("input_lmas_ramp_updated (1)") as f:
+with open("input_lmas_ramp_updated") as f:
     inputs = json.load(f)
 # inputs["forecast"] = [["M07A5", 60361, 744]]
 # inputs["forecast"] = [["B05Y5", 5461, 744]]
 # inputs["forecast"] = [["M07A5_2", 19461, 744]]
-inputs["forecast"] = inputs["forecasta"]
+# inputs["forecast"] = inputs["forecasta"]
 # print(inputs["forecast"])
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
 
+inputs["forecast"] = [["N82B1", 50000, 744]]
+
 model = ScheduleModel(inputs, time_scale_factor=4)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
-sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=True, verbose=True)
+sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=False, verbose=True)
 # %%
 
 jobs_chart = sol.visualize_jobs()

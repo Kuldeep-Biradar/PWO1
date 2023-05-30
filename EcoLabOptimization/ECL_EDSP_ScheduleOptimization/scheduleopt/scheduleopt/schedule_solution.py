@@ -230,7 +230,7 @@ class ScheduleSolution:
         schedule = self._job_schedule.copy()
         schedule["Start"] /= self._time_scale_factor
         schedule["End"] /= self._time_scale_factor
-        schedule["ConsumptionRate"] *= (self._time_scale_factor/60)
+        schedule["ConsumptionRate"] *= self._time_scale_factor / 60
         return schedule
 
     def _create_time_series(self):
@@ -288,6 +288,8 @@ class ScheduleSolution:
         production = pd.concat([production, *initial_amounts], ignore_index=True)
         if "Expiration" not in production.columns:
             production["Expiration"] = 0
+        if "Consumption" not in production.columns:
+            production["Consumption"] = 0
 
         production = production.fillna(0)
         production["NetProduction"] = (

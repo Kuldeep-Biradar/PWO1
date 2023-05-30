@@ -651,7 +651,11 @@ class ScheduleModel:
                 ).OnlyEnforceIf(both_present)
             prev_prod_job = prod_job
 
-        max_consumption = max([task.consumption for task in consume_tasks])
+        if len(consume_tasks) > 0:
+            max_consumption = max([task.consumption for task in consume_tasks])
+        else:
+            max_consumption = 0
+
         twelve_hours = 12 * self._time_scale_factor
         lmas_batch = int(self._batches.get("LMAS"))
         real_lmas_batch = int(self._batches.get("LMAS"))
@@ -1501,8 +1505,8 @@ class ScheduleModel:
         #     "expiration",
         # )
         # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
-        makespan_prod = model.NewIntVar(0, horizon, "makespan")
-        model.AddMaxEquality(makespan_prod, prod_ends)
+        # makespan_prod = model.NewIntVar(0, horizon, "makespan")
+        # model.AddMaxEquality(makespan_prod, prod_ends)
         makespan_non_prod = model.NewIntVar(0, horizon, "makespan")
         model.AddMaxEquality(makespan_non_prod, non_prod_ends)
 
