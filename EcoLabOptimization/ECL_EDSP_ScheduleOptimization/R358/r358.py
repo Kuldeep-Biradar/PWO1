@@ -16,31 +16,48 @@ with open("input_lmas_ramp_updated") as f:
 # print(inputs["forecast"])
 # with open("input_test/input_sample.json") as f:
 #     inputs = json.load(f)
+inputs["jobs"] = {
+    "M07A5": [
+        [[2.5, 5, "R368", "J06S6"]],
+        [[24, 1, "UF5", "J06S6"], [24, 7, "UF4", "J06S6"]],
+    ],
+    "A09B4": [
+        [[1.8, 0, "R358", "A09B4"]],
+        [[24, 1, "UF5", "A09B4"], [24, 7, "UF4", "A09B4"]],
+    ],
+}
 
-inputs["forecast"] = [["N82B1", 50000, 744]]
+inputs["forecast"] = [
+    ["M07A5", 1000, 744],
+    ["A09B4", 1000, 744],
+]
 
 model = ScheduleModel(inputs, time_scale_factor=4)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
-sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=False, verbose=True)
+sol = model.solve_least_time_schedule(
+    max_time_in_seconds=None, enforce_consumption_constraint=False, verbose=True
+)
 # %%
 
 jobs_chart = sol.visualize_jobs()
 machines_chart = sol.visualize_machines()
 jobs_chart
 
-#%%
+# %%
 prod = sol.cumulative_production.copy()
 # prod.index = prod.index / 60
 ax = prod["LMAS"].plot()
 fig = ax.get_figure()
 ax.set_ylabel("Quantity of LMAS")
 ax.set_xlabel("Hours")
-#%%
+# %%
 model = ScheduleModel(inputs, time_scale_factor=4, previous_schedule=sol.job_schedule)
 # %%
 # sol = model.solve_minimize_delivery_miss(max_time_in_seconds=None, verbose=True)
-sol = model.solve_least_time_schedule(max_time_in_seconds=None, enforce_consumption_constraint=True, verbose=True)
+sol = model.solve_least_time_schedule(
+    max_time_in_seconds=None, enforce_consumption_constraint=True, verbose=True
+)
 # %%
 
 jobs_chart = sol.visualize_jobs()
@@ -75,20 +92,20 @@ sol.production
 
 # %%
 for n in range(len(model._overlaps)):
+
     def display_overlaps(row):
         return [sol.solver.Value(item) for item in row]
-
 
     print([display_overlaps(row) for row in model._overlaps[n]])
+
     def display_overlaps(row):
         return [sol.solver.Value(item) for item in row]
-
 
     print([display_overlaps(row) for row in model._task_positions[n]])
     print()
 
-#%%
-[sol.solver.Value(job.is_present) for job in sol.jobs if job.min_id=="LMAS"]
+# %%
+[sol.solver.Value(job.is_present) for job in sol.jobs if job.min_id == "LMAS"]
 # %%
 
 jobs_chart = sol.visualize_jobs()

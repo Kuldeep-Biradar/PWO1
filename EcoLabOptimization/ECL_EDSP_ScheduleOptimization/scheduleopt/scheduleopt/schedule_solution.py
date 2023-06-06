@@ -91,37 +91,39 @@ class ScheduleSolution:
                 if solver.Value(job.is_present) == 0:
                     continue
                 for task in job.tasks:
-                    task_id = task.task_id
+                    alt_tasks = [task] if task.alternates is None or len(task.alternates) == 0 else task.alternates
+                    for alt_task in alt_tasks:
+                        task_id = alt_task.task_id
 
-                    # Check if task is used
-                    if solver.Value(task.is_present) == 0:
-                        continue
-                    machine = task.machine_id
-                    min_id = task.min_id
-                    duration = solver.Value(task.duration)
-                    if duration == 0:
-                        continue
+                        # Check if task is used
+                        if solver.Value(alt_task.is_present) == 0:
+                            continue
+                        machine = alt_task.machine_id
+                        min_id = alt_task.min_id
+                        duration = solver.Value(alt_task.duration)
+                        if duration == 0:
+                            continue
 
-                    # Used for change over intervals
-                    try:
-                        if "changeover" in task.end.Name():
-                            task_id = "changeover"
-                        elif "recharge" in task.end.Name():
-                            task_id = "recharge"
-                    except:
-                        pass
-                    assigned_jobs[machine].append(
-                        assigned_task_type(
-                            start=solver.Value(task.start),
-                            job=job_id,
-                            index=task_id,
-                            duration=solver.Value(task.duration),
-                            min_id=min_id,
-                            machine_id=machine,
-                            consumption_rate=task.consumption_rate,
-                            expiration=solver.Value(task.expired),
+                        # Used for change over intervals
+                        try:
+                            if "changeover" in alt_task.end.Name():
+                                task_id = "changeover"
+                            elif "recharge" in alt_task.end.Name():
+                                task_id = "recharge"
+                        except:
+                            pass
+                        assigned_jobs[machine].append(
+                            assigned_task_type(
+                                start=solver.Value(task.start),
+                                job=job_id,
+                                index=task_id,
+                                duration=solver.Value(task.duration),
+                                min_id=min_id,
+                                machine_id=machine,
+                                consumption_rate=alt_task.consumption_rate,
+                                expiration=solver.Value(task.expired),
+                            )
                         )
-                    )
 
             # Create per machine output lines.
             output = ""

@@ -83,7 +83,7 @@ class ScheduleModel:
             r358 = files("scheduleopt.data").joinpath("r358-cleaning-matrix.csv")
             r368 = files("scheduleopt.data").joinpath("r368-cleaning-matrix.csv")
             r359 = files("scheduleopt.data").joinpath("r359-cleaning-matrix.csv")
-            cleaning_matrix = {0: r358, 5: r368, 8:r359}
+            cleaning_matrix = {0: r358, 5: r368, 8: r359}
 
         for k, v in cleaning_matrix.items():
             if isinstance(v, (str, Path)):
@@ -488,17 +488,17 @@ class ScheduleModel:
                     model.Add(sum(l_presences) == 0).OnlyEnforceIf(b_job_is_used.Not())
 
                     task_interval = TaskInterval(
-                        min_id,
-                        task_job_id,
-                        task_id,
-                        -1,
-                        machine_id,
-                        start,
-                        duration,
-                        end,
-                        interval,
-                        b_job_is_used,
-                        alt_intervals,
+                        min_id=min_id,
+                        job_id=task_job_id,
+                        task_id=task_id,
+                        alt_id=-1,
+                        machine_id=machine_id,
+                        start=start,
+                        duration=duration,
+                        end=end,
+                        interval=interval,
+                        is_present=b_job_is_used,
+                        alternates=alt_intervals,
                     )
                 else:
                     machine_id = task[0][1]
@@ -1429,19 +1429,24 @@ class ScheduleModel:
         production_intervals = []
         for job in jobs:
             for task in job.tasks:
-                intervals_per_resources[task.machine_id].append(task)
-                all_machines.add(task.machine_id)
+                if task.alternates is not None and len(task.alternates) > 0:
+                    for alternate in task.alternates:
+                        intervals_per_resources[alternate.machine_id].append(alternate)
+                        all_machines.add(alternate.machine_id)
+                else:
+                    intervals_per_resources[task.machine_id].append(task)
+                    all_machines.add(task.machine_id)
 
-        if -1 in all_machines:
-            all_machines.remove(-1)
-            shutdown_intervals = [task.interval for task in intervals_per_resources[-1]]
-            for machine_id in all_machines:
-                production_intervals = [
-                    task.interval
-                    for task in intervals_per_resources[machine_id]
-                    if task.task_id >= 0
-                ]
-                model.AddNoOverlap(production_intervals + shutdown_intervals)
+        # if -1 in all_machines:
+        #     all_machines.remove(-1)
+        #     shutdown_intervals = [task.interval for task in intervals_per_resources[-1]]
+        #     for machine_id in all_machines:
+        #         production_intervals = [
+        #             task.interval
+        #             for task in intervals_per_resources[machine_id]
+        #             if task.task_id >= 0
+        #         ]
+        #         model.AddNoOverlap(production_intervals + shutdown_intervals)
 
         # Create machines constraints.
         for machine_id in all_machines:
