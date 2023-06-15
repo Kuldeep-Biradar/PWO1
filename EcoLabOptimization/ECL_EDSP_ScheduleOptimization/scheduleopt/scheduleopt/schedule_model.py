@@ -179,12 +179,13 @@ class ScheduleModel:
                         alt_task[4] = math.ceil(
                             int(alt_task[4] * 60 / time_scale_factor)
                         )
-                        min_consumption_rate = min(min_consumption_rate, alt_task[4])
+                        if alt_task[4] != 0:
+                            min_consumption_rate = min(min_consumption_rate, alt_task[4])
 
         # scale LMAS batches and consumption by smallest consumption rate in data
         if self._previous_schedule is not None:
             min_consumption_rate = min(
-                self._previous_schedule["ConsumptionRate"].min(), min_consumption_rate
+                self._previous_schedule["ConsumptionRate"].loc[self._previous_schedule["ConsumptionRate"] > 0].min(), min_consumption_rate
             )
 
         if min_consumption_rate == float("inf"):
