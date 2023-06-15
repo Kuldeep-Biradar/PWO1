@@ -1541,7 +1541,7 @@ class ScheduleModel:
         return ScheduleSolution(
             status,
             solver,
-            jobs,
+            jobs + prod_jobs,
             deepcopy(self._machine_names),
             deepcopy(self._cleaning_matrix),
             deepcopy(self._changeover_operations),
