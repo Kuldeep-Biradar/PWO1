@@ -713,8 +713,9 @@ class ScheduleModel:
                 prod_jobs[n].is_present.Not(), prod_jobs[n + 1].is_present.Not()
             )
 
-        # for n in range(max_prod_jobs + 1, len(prod_jobs)):
-        #     model.Add(prod_jobs[n].is_present == 0)
+        for n in range(max_prod_jobs + 1, len(prod_jobs)):
+            model.Add(prod_jobs[n].is_present == 0)
+        prod_jobs = prod_jobs[:max_prod_jobs + 1]
 
         # model.Add(prod_jobs[-1].is_present == 0)
         num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
