@@ -1527,7 +1527,7 @@ class ScheduleModel:
         ]
 
         all_jobs = jobs + production_jobs
-        self._add_no_overlap_condition(model, jobs)
+        self._add_no_overlap_condition(model, all_jobs)
 
         # Makespan objective.
         lmas_batch = self._batches.get("LMAS")
