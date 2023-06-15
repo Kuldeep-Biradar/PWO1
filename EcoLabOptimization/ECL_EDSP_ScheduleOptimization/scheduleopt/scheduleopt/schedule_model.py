@@ -58,16 +58,18 @@ class ScheduleModel:
         self,
         input_data: Union[dict, ModelData, str, Path],
         previous_schedule: pd.DataFrame = None,
-        schedule_hint: pd.DataFrame = None,
+        schedule_base: pd.DataFrame = None,
         cleaning_matrix: Optional[Dict[int, Union[pd.DataFrame, str, Path]]] = None,
         time_scale_factor: int = 2,
+        lmas_limit: Optional[int] = None,
     ):
         self._previous_schedule = previous_schedule
-        self._schedule_hint = schedule_hint
+        self._schedule_base = schedule_base
         self._time_scale_factor = time_scale_factor
         self._process_cleaning_matrix(cleaning_matrix)
         self._load_input_data(input_data)
         self._initialize_inputs()
+        self._lmas_limit = lmas_limit
 
     def _process_cleaning_matrix(
         self, cleaning_matrix: Dict[int, Union[pd.DataFrame, str, Path]] = None
@@ -177,12 +179,13 @@ class ScheduleModel:
                         alt_task[4] = math.ceil(
                             int(alt_task[4] * 60 / time_scale_factor)
                         )
-                        min_consumption_rate = min(min_consumption_rate, alt_task[4])
+                        if alt_task[4] != 0:
+                            min_consumption_rate = min(min_consumption_rate, alt_task[4])
 
         # scale LMAS batches and consumption by smallest consumption rate in data
         if self._previous_schedule is not None:
             min_consumption_rate = min(
-                self._previous_schedule["ConsumptionRate"].min(), min_consumption_rate
+                self._previous_schedule["ConsumptionRate"].loc[self._previous_schedule["ConsumptionRate"] > 0].min(), min_consumption_rate
             )
 
         if min_consumption_rate == float("inf"):
@@ -294,6 +297,7 @@ class ScheduleModel:
         consumption = {}
 
         jobs = []
+        lmas_jobs = []
 
         # Iterate through all jobs
 
@@ -372,20 +376,28 @@ class ScheduleModel:
                     task_interval.consumption = task_consume_total
                     task_interval.consumption_rate = task_consume_rate
                     task_intervals.append(task_interval)
-                jobs += product_jobs
+                # jobs += product_jobs
                 job = Job(
                     job_id,
                     min_id,
                     int(self._batches.get(min_id, 0)),
                     task_intervals,
                     job_is_present,
-                    production_jobs=product_jobs,
+                    # production_jobs=product_jobs,
                     last_consumed=last_consumed,
                     total_consumed=math.ceil(job_consume_total),
                 )
-                jobs.append(job)
+                if min_id == "LMAS":
+                    lmas_jobs.append(job)
+                else:
+                    jobs.append(job)
                 job_id += 1
 
+        production_jobs_runtime = 0
+        production_batch_time = sum([task[0][0] for task in self._jobs.get("LMAS")])
+
+        required_lmas = 0
+        lmas_batches = []
         for job in jobs_data:
             # LMAS Collections
             current_leftover = 0  # Currently available LMAS
@@ -537,24 +549,17 @@ class ScheduleModel:
                     production_total_batches = math.ceil(
                         (task_consume_total) / production_batch_size
                     )
-                    production_jobs_data = [
-                        self._jobs.get(k)
-                    ] * production_total_batches
-                    production_jobs = self._create_job_intervals(
-                        model, production_jobs_data, horizon, job_id
-                    )
-                    # set outer job id
-                    job_id = production_jobs[-1].job_id
 
-                    product_jobs += production_jobs
+                    lmas_batches.append(production_total_batches)
+
                 else:
                     task_consume_total = 0
 
                 task_interval.consumption = task_consume_total
                 task_interval.consumption_rate = task_consume_rate
                 task_intervals.append(task_interval)
+                required_lmas += job_consume_total
 
-            jobs += product_jobs
             # min_id of last job is product
             job = Job(
                 task_job_id,
@@ -562,7 +567,7 @@ class ScheduleModel:
                 int(self._batches.get(min_id, 0)),
                 task_intervals,
                 b_job_is_used,
-                production_jobs=product_jobs,
+                # production_jobs=product_jobs,
                 last_consumed=last_consumed,
                 total_consumed=math.ceil(job_consume_total),
             )
@@ -579,7 +584,22 @@ class ScheduleModel:
             jobs.append(job)
             job_id += 1
 
-        return jobs
+        lmas_batches = sum(lmas_batches)
+        if lmas_batches > 0:
+            production_jobs_data = [self._jobs.get(k)] * lmas_batches
+
+            job_id += 1
+            production_jobs, _ = self._create_job_intervals(
+                model, production_jobs_data, horizon, job_id
+            )
+            # set outer job id
+            job_id = production_jobs[-1].job_id
+            self._min_lmas_batches = math.ceil((required_lmas) / production_batch_size)
+        else:
+            production_jobs = []
+            self._min_lmas_batches = 0
+
+        return jobs, production_jobs
 
     def _create_shutdown_jobs(self, model, jobs, horizon):
         job_id = max([job.job_id for job in jobs]) + 1
@@ -615,22 +635,17 @@ class ScheduleModel:
         return jobs
 
     def _create_consumption_constraints(
-        self, model: cp_model.CpModel, jobs: List[Job], horizon
+        self, model: cp_model.CpModel, jobs: List[Job], prod_jobs, horizon
     ):
+        if len(prod_jobs) == 0:
+            return
+
         self.excesses = []
         consume_tasks = []
-        last_prod_jobs = []
-        prod_jobs = []
 
         for n, job in enumerate(jobs):
-            total_other_consumed = 0
-            if len(job.production_jobs) == 0:
-                continue
-
-            prod_jobs += job.production_jobs
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
-            if len(job.production_jobs) > 0:
-                last_prod_jobs.append(job.production_jobs[-1])
+
         prod_jobs = tuple(prod_jobs)
 
         prev_prod_job = None
@@ -682,6 +697,13 @@ class ScheduleModel:
 
         full_consumption = sum([task.consumption for task in consume_tasks])
         min_prod_jobs = math.ceil(full_consumption / self._batches.get("LMAS"))
+        max_prod_jobs = math.floor(
+            horizon / prod_jobs[0].tasks[-1].duration_value
+        )
+
+        if max_prod_jobs < min_prod_jobs:
+            raise ValueError("horizon is too short to produce all required LMAS")
+
 
         for n in range(min_prod_jobs):
             # for n in range(len(prod_jobs) - 1):
@@ -691,6 +713,10 @@ class ScheduleModel:
             model.AddImplication(
                 prod_jobs[n].is_present.Not(), prod_jobs[n + 1].is_present.Not()
             )
+
+        for n in range(max_prod_jobs + 1, len(prod_jobs)):
+            model.Add(prod_jobs[n].is_present == 0)
+        prod_jobs = prod_jobs[:max_prod_jobs + 1]
 
         # model.Add(prod_jobs[-1].is_present == 0)
         num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
@@ -1477,13 +1503,13 @@ class ScheduleModel:
 
         # Creates job intervals and add to the corresponding machine lists.
 
-        jobs = self._create_job_intervals(
+        jobs, production_jobs = self._create_job_intervals(
             model, jobs_data, horizon, previous_schedule=self._previous_schedule
         )
 
         # Check for consumption
         if enforce_consumption_constraint:
-            self._create_consumption_constraints(model, jobs, horizon)
+            self._create_consumption_constraints(model, jobs, production_jobs, horizon)
         # self._require_initial_production_jobs(model, jobs)
 
         # # Force all jobs to be non-consumption products to be present
