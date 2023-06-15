@@ -297,7 +297,7 @@ class ScheduleModel:
         consumption = {}
 
         jobs = []
-        lmas_jobs = []
+        production_jobs = []
 
         # Iterate through all jobs
 
@@ -309,8 +309,6 @@ class ScheduleModel:
         total_leftover = 0
         if previous_schedule is not None:
             for n, (prev_job_id, df) in enumerate(previous_schedule.groupby("JobId")):
-                # if df.iloc[0]["MIN"] == "LMAS":
-                #     continue
 
                 job_consume_total = 0
                 product_jobs = []
@@ -388,7 +386,7 @@ class ScheduleModel:
                     total_consumed=math.ceil(job_consume_total),
                 )
                 if min_id == "LMAS":
-                    lmas_jobs.append(job)
+                    production_jobs.append(job)
                 else:
                     jobs.append(job)
                 job_id += 1
@@ -589,14 +587,14 @@ class ScheduleModel:
             production_jobs_data = [self._jobs.get(k)] * lmas_batches
 
             job_id += 1
-            production_jobs, _ = self._create_job_intervals(
+            production_jobs_2, _ = self._create_job_intervals(
                 model, production_jobs_data, horizon, job_id
             )
             # set outer job id
-            job_id = production_jobs[-1].job_id
+            job_id = production_jobs_2[-1].job_id
+            production_jobs = production_jobs + production_jobs_2
             self._min_lmas_batches = math.ceil((required_lmas) / production_batch_size)
         else:
-            production_jobs = []
             self._min_lmas_batches = 0
 
         return jobs, production_jobs
