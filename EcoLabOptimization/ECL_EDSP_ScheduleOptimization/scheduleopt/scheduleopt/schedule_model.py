@@ -1526,6 +1526,7 @@ class ScheduleModel:
             job.tasks[-1].end for job in jobs if job.tasks[0].min_id != "LMAS"
         ]
 
+        all_jobs = jobs + production_jobs
         self._add_no_overlap_condition(model, jobs)
 
         # Makespan objective.
@@ -1567,7 +1568,7 @@ class ScheduleModel:
         return ScheduleSolution(
             status,
             solver,
-            jobs + production_jobs,
+            all_jobs,
             deepcopy(self._machine_names),
             deepcopy(self._cleaning_matrix),
             deepcopy(self._changeover_operations),
