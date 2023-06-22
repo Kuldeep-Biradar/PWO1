@@ -394,6 +394,9 @@ class ScheduleModel:
         production_jobs_runtime = 0
         production_batch_time = sum([task[0][0] for task in self._jobs.get("LMAS")])
 
+        reactor_ids = [0,5,8]
+        uf_ids = [1,6,7]
+
         required_lmas = 0
         lmas_batches = []
         for job in jobs_data:
@@ -408,11 +411,17 @@ class ScheduleModel:
             b_job_is_used = model.NewBoolVar(f"job_is_used_j{job_id}")
             previous_end = None  # save previous task end within a job
             task_job_id = job_id
+
+            previous_reactor_end = None
+            previous_uf_end = None
+            previous_machine_id = None
+
             for task_id, task in enumerate(job):
                 # Find min and max task length within alternative tasks
                 min_duration = math.ceil(task[0][0])
                 max_duration = math.ceil(task[0][0])
                 min_id = task[0][3]
+                machine_id = task[0][1]
 
                 num_alternatives = len(task)
                 all_alternatives = range(num_alternatives)
@@ -437,8 +446,19 @@ class ScheduleModel:
                 ends[(task_job_id, task_id)] = end
 
                 # Add precedence with previous task in the same job.
-                if previous_end is not None:
-                    model.Add(start == previous_end).OnlyEnforceIf(b_job_is_used)
+                if machine_id in reactor_ids:
+                    if previous_reactor_end is not None:
+                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
+                    previous_reactor_end = end
+                # elif machine_id in uf_ids:
+                #     if previous_uf_end is None:
+                #         model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
+                #     else:
+                #         model.Add(start == previous_uf_end).OnlyEnforceIf(b_job_is_used)
+                #     previous_uf_end = end
+                else:
+                    if previous_end is not None:
+                        model.Add(start == previous_end).OnlyEnforceIf(b_job_is_used)
                 previous_end = end
 
                 # Create alternative intervals.
