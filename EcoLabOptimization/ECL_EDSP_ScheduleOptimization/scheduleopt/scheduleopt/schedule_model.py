@@ -450,12 +450,12 @@ class ScheduleModel:
                     if previous_reactor_end is not None:
                         model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
                     previous_reactor_end = end
-                # elif machine_id in uf_ids:
-                #     if previous_uf_end is None:
-                #         model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
-                #     else:
-                #         model.Add(start == previous_uf_end).OnlyEnforceIf(b_job_is_used)
-                #     previous_uf_end = end
+                elif machine_id in uf_ids:
+                    if previous_uf_end is None:
+                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
+                    else:
+                        model.Add(start == previous_uf_end).OnlyEnforceIf(b_job_is_used)
+                    previous_uf_end = end
                 else:
                     if previous_end is not None:
                         model.Add(start == previous_end).OnlyEnforceIf(b_job_is_used)
@@ -1207,7 +1207,8 @@ class ScheduleModel:
             job_id = job.job_id
             job_is_present = job.is_present
 
-            for n, task in enumerate(job.tasks):
+            # iterate backwards through tasks
+            for n, task in enumerate(reversed(job.tasks)):
                 task_id = task.task_id
                 changeover_tasks.append(task)
                 machine_id = task.machine_id
@@ -1218,16 +1219,6 @@ class ScheduleModel:
                 # For pure consumption products that do not have forecasts
                 if min_id == "LMAS":
                     continue
-
-                # Check if next task is same machine and min_id
-                if n != len(job.tasks) - 1:
-                    next_task = job.tasks[n + 1]
-                    if (
-                        next_task.machine_id == machine_id
-                        and next_task.min_id == min_id
-                    ):
-                        # No need to change over since task.end == next_task.start
-                        continue
 
                 if machine_id not in cleaning_matrix:
                     continue
@@ -1296,7 +1287,7 @@ class ScheduleModel:
                 )
                 model.Add(sum(l_changeovers) == 1).OnlyEnforceIf(l_last.Not())
 
-                changeover_tasks.append(
+                job.tasks.append(
                     TaskInterval(
                         min_id,
                         job_id,
@@ -1310,34 +1301,14 @@ class ScheduleModel:
                         job_is_present,
                     )
                 )
+                # Once one task is completed break out of lower for loop
+                break
 
-                # if machine_id not in cleaning_matrix:
-                #     continue
-                # if min_id not in cleaning_matrix.get(machine_id):
-                #     continue
-
-                # for other_job in jobs:
-                #     other_job_id = job.job_id
-                #     other_job_is_present = job.is_present
-
-                #     for other_task in other_job.tasks:
-                #         other_task_id = task.task_id
-                #         other_machine_id = task.machine_id
-                #         other_min_id = task.min_id
-                #         other_end = task.end
-
-                #         if other_job_id == job_id and task_id == other_task_id:
-                #             continue
-
-                #         if other_machine_id != machine_id:
-                #             continue
-                #         if other_min_id not in cleaning_matrix[machine_id][min_id]:
-                #             continue
 
             job_tasks.append(changeover_tasks)
 
-        for job, tasks in zip(jobs, job_tasks):
-            job.tasks = tasks
+        # for job, tasks in zip(jobs, job_tasks):
+        #     job.tasks = tasks
         self.lasts = lasts
 
     def _create_changeover_intervals(self, model, horizon, jobs):
