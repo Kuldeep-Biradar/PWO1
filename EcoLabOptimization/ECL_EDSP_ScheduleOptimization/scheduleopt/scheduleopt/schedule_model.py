@@ -454,7 +454,7 @@ class ScheduleModel:
                     if previous_uf_end is None:
                         model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
                     else:
-                        model.Add(start == previous_uf_end).OnlyEnforceIf(b_job_is_used)
+                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
                     previous_uf_end = end
                 else:
                     if previous_end is not None:
