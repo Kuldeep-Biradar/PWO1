@@ -394,9 +394,6 @@ class ScheduleModel:
         production_jobs_runtime = 0
         production_batch_time = sum([task[0][0] for task in self._jobs.get("LMAS")])
 
-        reactor_ids = [0,5,8]
-        uf_ids = [1,6,7]
-
         required_lmas = 0
         lmas_batches = []
         for job in jobs_data:
@@ -411,17 +408,11 @@ class ScheduleModel:
             b_job_is_used = model.NewBoolVar(f"job_is_used_j{job_id}")
             previous_end = None  # save previous task end within a job
             task_job_id = job_id
-
-            previous_reactor_end = None
-            previous_uf_end = None
-            previous_machine_id = None
-
             for task_id, task in enumerate(job):
                 # Find min and max task length within alternative tasks
                 min_duration = math.ceil(task[0][0])
                 max_duration = math.ceil(task[0][0])
                 min_id = task[0][3]
-                machine_id = task[0][1]
 
                 num_alternatives = len(task)
                 all_alternatives = range(num_alternatives)
@@ -446,19 +437,8 @@ class ScheduleModel:
                 ends[(task_job_id, task_id)] = end
 
                 # Add precedence with previous task in the same job.
-                if machine_id in reactor_ids:
-                    if previous_reactor_end is not None:
-                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
-                    previous_reactor_end = end
-                elif machine_id in uf_ids:
-                    if previous_uf_end is None:
-                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
-                    else:
-                        model.Add(start == previous_reactor_end).OnlyEnforceIf(b_job_is_used)
-                    previous_uf_end = end
-                else:
-                    if previous_end is not None:
-                        model.Add(start == previous_end).OnlyEnforceIf(b_job_is_used)
+                if previous_end is not None:
+                    model.Add(start == previous_end).OnlyEnforceIf(b_job_is_used)
                 previous_end = end
 
                 # Create alternative intervals.
@@ -689,21 +669,21 @@ class ScheduleModel:
         else:
             max_consumption = 0
 
-        twelve_hours = 12 * self._time_scale_factor
+        twelve_hours = 24 * self._time_scale_factor
         lmas_batch = int(self._batches.get("LMAS"))
         real_lmas_batch = int(self._batches.get("LMAS"))
 
-        expirations = []
-        for n, p in enumerate(prod_jobs):
-            expirations.append(
-                model.NewIntVar(
-                    0,
-                    lmas_batch,
-                    # lmas_batch * len(prod_jobs),
-                    "expiration_value",
-                )
-            )
-        expirations = tuple(expirations)
+        # expirations = []
+        # for n, p in enumerate(prod_jobs):
+        #     expirations.append(
+        #         model.NewIntVar(
+        #             0,
+        #             lmas_batch,
+        #             # lmas_batch * len(prod_jobs),
+        #             "expiration_value",
+        #         )
+        #     )
+        # expirations = tuple(expirations)
 
         prior_states = []
         states = []
@@ -760,16 +740,16 @@ class ScheduleModel:
             all_strictly_before = []
 
             for k, other_prod_job in enumerate(prod_jobs):
-                future_expiration = model.NewIntVar(
-                    0,
-                    lmas_batch,
-                    "future_expire",
-                )
-                past_expiration = model.NewIntVar(
-                    0,
-                    lmas_batch,
-                    "past_expire",
-                )
+            #     future_expiration = model.NewIntVar(
+            #         0,
+            #         lmas_batch,
+            #         "future_expire",
+            #     )
+            #     past_expiration = model.NewIntVar(
+            #         0,
+            #         lmas_batch,
+            #         "past_expire",
+            #     )
 
                 both_present = model.NewBoolVar("both_present")
                 model.Add(
@@ -787,17 +767,17 @@ class ScheduleModel:
                     prod_job.tasks[0].start <= other_prod_job.tasks[0].start
                 ).OnlyEnforceIf([after_other_job.Not(), both_present])
 
-                model.Add(past_expiration == 0).OnlyEnforceIf(after_other_job.Not())
-                model.Add(past_expiration == expirations[k]).OnlyEnforceIf(
-                    [after_other_job, both_present]
-                )
+            #     model.Add(past_expiration == 0).OnlyEnforceIf(after_other_job.Not())
+            #     model.Add(past_expiration == expirations[k]).OnlyEnforceIf(
+            #         [after_other_job, both_present]
+            #     )
 
-                model.Add(future_expiration == expirations[k]).OnlyEnforceIf(
-                    [after_other_job.Not(), both_present]
-                )
-                model.Add(future_expiration == 0).OnlyEnforceIf(
-                    [after_other_job, both_present]
-                )
+            #     model.Add(future_expiration == expirations[k]).OnlyEnforceIf(
+            #         [after_other_job.Not(), both_present]
+            #     )
+            #     model.Add(future_expiration == 0).OnlyEnforceIf(
+            #         [after_other_job, both_present]
+            #     )
                 after_other_job_and_both_present = model.NewBoolVar("both_present")
                 model.Add(sum([after_other_job, both_present]) == 2).OnlyEnforceIf(
                     after_other_job_and_both_present
@@ -806,10 +786,9 @@ class ScheduleModel:
                     after_other_job_and_both_present.Not()
                 )
 
-                prior_expirations.append(past_expiration)
-                future_expirations.append(future_expiration)
+            #    prior_expirations.append(past_expiration)
+            #    future_expirations.append(future_expiration)
                 prior_production.append(after_other_job_and_both_present)
-
             num_prior_jobs = sum(prior_production)
             num_subsequent_jobs = num_present_prod_jobs - sum(prior_production)
 
@@ -1079,7 +1058,7 @@ class ScheduleModel:
             model.Add(
                 prior_state
                 == num_prior_jobs * lmas_batch
-                - sum(prior_expirations)
+            #    - sum(prior_expirations)
                 - sum(prior_consumptions)
             ).OnlyEnforceIf(prod_job.is_present)
             model.Add(prior_state == 0).OnlyEnforceIf(prod_job.is_present.Not())
@@ -1093,7 +1072,7 @@ class ScheduleModel:
                 future_state
                 == (num_subsequent_jobs) * lmas_batch
                 + prior_state
-                - sum(future_expirations)
+            #    - sum(future_expirations)
                 - sum(future_consumptions)
                 - sum(current_consumptions)
             ).OnlyEnforceIf(prod_job.is_present)
@@ -1111,26 +1090,26 @@ class ScheduleModel:
                 job.is_present
             )
             model.Add(consume == 0).OnlyEnforceIf(job.is_present.Not())
-            expiration_value = expirations[n]
-            expiration_gt_0 = model.NewBoolVar("expiration_gt_0")
-            model.Add(expiration == prior_state + lmas_batch - consume).OnlyEnforceIf(
-                prod_job.is_present
-            )
-            model.Add(expiration == 0).OnlyEnforceIf(prod_job.is_present.Not())
-            model.Add(expiration > 0).OnlyEnforceIf(expiration_gt_0)
-            model.Add(expiration_value == expiration).OnlyEnforceIf(expiration_gt_0)
-            model.Add(expiration <= 0).OnlyEnforceIf(expiration_gt_0.Not())
-            model.Add(expiration_value == 0).OnlyEnforceIf(expiration_gt_0.Not())
-            prod_job.tasks[-1].expired = expiration_value
+            #expiration_value = expirations[n]
+            #expiration_gt_0 = model.NewBoolVar("expiration_gt_0")
+            #model.Add(expiration == prior_state + lmas_batch - consume).OnlyEnforceIf(
+            #    prod_job.is_present
+            #)
+            #model.Add(expiration == 0).OnlyEnforceIf(prod_job.is_present.Not())
+            #model.Add(expiration > 0).OnlyEnforceIf(expiration_gt_0)
+            ##model.Add(expiration_value == expiration).OnlyEnforceIf(expiration_gt_0)
+            #model.Add(expiration <= 0).OnlyEnforceIf(expiration_gt_0.Not())
+            #model.Add(expiration_value == 0).OnlyEnforceIf(expiration_gt_0.Not())
+            #prod_job.tasks[-1].expired = expiration_value
 
             states.append(prior_state)
             future_states.append(future_state)
-            current_states.append(sum(prior_expirations))
+            #current_states.append(sum(prior_expirations))
             all_consumptions.append(sum(current_consumptions))
         self._expirations = list(
             zip(
                 [j.tasks[-1].end for j in prod_jobs],
-                expirations,
+                #expirations,
                 states,
                 current_states,
                 future_states,
@@ -1207,8 +1186,7 @@ class ScheduleModel:
             job_id = job.job_id
             job_is_present = job.is_present
 
-            # iterate backwards through tasks
-            for n, task in enumerate(reversed(job.tasks)):
+            for n, task in enumerate(job.tasks):
                 task_id = task.task_id
                 changeover_tasks.append(task)
                 machine_id = task.machine_id
@@ -1219,6 +1197,16 @@ class ScheduleModel:
                 # For pure consumption products that do not have forecasts
                 if min_id == "LMAS":
                     continue
+
+                # Check if next task is same machine and min_id
+                if n != len(job.tasks) - 1:
+                    next_task = job.tasks[n + 1]
+                    if (
+                        next_task.machine_id == machine_id
+                        and next_task.min_id == min_id
+                    ):
+                        # No need to change over since task.end == next_task.start
+                        continue
 
                 if machine_id not in cleaning_matrix:
                     continue
@@ -1287,7 +1275,7 @@ class ScheduleModel:
                 )
                 model.Add(sum(l_changeovers) == 1).OnlyEnforceIf(l_last.Not())
 
-                job.tasks.append(
+                changeover_tasks.append(
                     TaskInterval(
                         min_id,
                         job_id,
@@ -1301,14 +1289,34 @@ class ScheduleModel:
                         job_is_present,
                     )
                 )
-                # Once one task is completed break out of lower for loop
-                break
 
+                # if machine_id not in cleaning_matrix:
+                #     continue
+                # if min_id not in cleaning_matrix.get(machine_id):
+                #     continue
+
+                # for other_job in jobs:
+                #     other_job_id = job.job_id
+                #     other_job_is_present = job.is_present
+
+                #     for other_task in other_job.tasks:
+                #         other_task_id = task.task_id
+                #         other_machine_id = task.machine_id
+                #         other_min_id = task.min_id
+                #         other_end = task.end
+
+                #         if other_job_id == job_id and task_id == other_task_id:
+                #             continue
+
+                #         if other_machine_id != machine_id:
+                #             continue
+                #         if other_min_id not in cleaning_matrix[machine_id][min_id]:
+                #             continue
 
             job_tasks.append(changeover_tasks)
 
-        # for job, tasks in zip(jobs, job_tasks):
-        #     job.tasks = tasks
+        for job, tasks in zip(jobs, job_tasks):
+            job.tasks = tasks
         self.lasts = lasts
 
     def _create_changeover_intervals(self, model, horizon, jobs):
