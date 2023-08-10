@@ -652,12 +652,9 @@ class ScheduleModel:
                 jobs.append(job)
         return jobs
 
-    def _create_consumption_constraints(
-        self, model: cp_model.CpModel, jobs: List[Job], prod_jobs, horizon
-    ):
+    def _create_consumption_constraints(self, model: cp_model.CpModel, jobs: List[Job], prod_jobs, horizon):
         if len(prod_jobs) == 0:
             return
-
         self.excesses = []
         consume_tasks = []
 
@@ -665,12 +662,8 @@ class ScheduleModel:
             consume_tasks += [task for task in job.tasks if task.consumption > 0]
 
         prod_jobs = tuple(prod_jobs)
-
         prev_prod_job = None
         for n, prod_job in enumerate(prod_jobs):
-            # model.AddHint(
-            #     prod_job.tasks[0].start, n * int(prod_job.tasks[0].duration_value)
-            # )
             if prev_prod_job is not None:
                 both_present = model.NewBoolVar("both_present")
                 model.Add(
@@ -691,23 +684,9 @@ class ScheduleModel:
 
         twelve_hours = 0 * self._time_scale_factor
         lmas_batch = int(self._batches.get("LMAS"))
-        real_lmas_batch = int(self._batches.get("LMAS"))
-
-        # expirations = []
-        # for n, p in enumerate(prod_jobs):
-        #     expirations.append(
-        #         model.NewIntVar(
-        #             0,
-        #             lmas_batch,
-        #             # lmas_batch * len(prod_jobs),
-        #             "expiration_value",
-        #         )
-        #     )
-        # expirations = tuple(expirations)
 
         prior_states = []
         states = []
-        current_states = []
         future_states = []
         all_consumptions = []
         overlaps = []
@@ -722,9 +701,7 @@ class ScheduleModel:
         if max_prod_jobs < min_prod_jobs:
             raise ValueError("horizon is too short to produce all required LMAS")
 
-
         for n in range(min_prod_jobs):
-            # for n in range(len(prod_jobs) - 1):
             model.Add(prod_jobs[n].is_present == 1)
 
         for n in range(min_prod_jobs + 1, len(prod_jobs) - 1):
@@ -736,41 +713,22 @@ class ScheduleModel:
             model.Add(prod_jobs[n].is_present == 0)
         prod_jobs = prod_jobs[:max_prod_jobs + 1]
 
-        # model.Add(prod_jobs[-1].is_present == 0)
         num_present_prod_jobs = sum([job.is_present for job in prod_jobs])
-        # model.Add(num_present_prod_jobs >= min_prod_jobs)
 
         for n, prod_job in enumerate(prod_jobs):
-            prod_window_start = model.NewIntVar(
+            prod_job_end = model.NewIntVar(
                 -horizon - twelve_hours, horizon + twelve_hours, "prod_window_start"
             )
-            prod_window_end = model.NewIntVar(
-                -horizon - twelve_hours, horizon + twelve_hours, "prod_window_end"
-            )
-            model.Add(prod_window_start == prod_job.tasks[-1].end)
-            model.Add(prod_window_end == prod_window_start + twelve_hours)
+            model.Add(prod_job_end == prod_job.tasks[-1].end)
+            
             prior_production = []
             future_consumptions = []
             prior_consumptions = []
-            current_consumptions = []
             job_overlaps = []
             job_tasks_positions = []
-            prior_expirations = []
-            future_expirations = []
             all_strictly_before = []
 
             for k, other_prod_job in enumerate(prod_jobs):
-                # future_expiration = model.NewIntVar(
-                #     0,
-                #     lmas_batch,
-                #     "future_expire",
-                # )
-                # past_expiration = model.NewIntVar(
-                #     0,
-                #     lmas_batch,
-                #     "past_expire",
-                # )
-
                 both_present = model.NewBoolVar("both_present")
                 model.Add(
                     sum([prod_job.is_present, other_prod_job.is_present]) == 2
@@ -787,17 +745,6 @@ class ScheduleModel:
                     prod_job.tasks[0].start <= other_prod_job.tasks[0].start
                 ).OnlyEnforceIf([after_other_job.Not(), both_present])
 
-                # model.Add(past_expiration == 0).OnlyEnforceIf(after_other_job.Not())
-                # model.Add(past_expiration == expirations[k]).OnlyEnforceIf(
-                #     [after_other_job, both_present]
-                # )
-
-                # model.Add(future_expiration == expirations[k]).OnlyEnforceIf(
-                #     [after_other_job.Not(), both_present]
-                # )
-                # model.Add(future_expiration == 0).OnlyEnforceIf(
-                #     [after_other_job, both_present]
-                # )
                 after_other_job_and_both_present = model.NewBoolVar("both_present")
                 model.Add(sum([after_other_job, both_present]) == 2).OnlyEnforceIf(
                     after_other_job_and_both_present
@@ -806,337 +753,76 @@ class ScheduleModel:
                     after_other_job_and_both_present.Not()
                 )
 
-                # prior_expirations.append(past_expiration)
-                # future_expirations.append(future_expiration)
                 prior_production.append(after_other_job_and_both_present)
 
             num_prior_jobs = sum(prior_production)
             num_subsequent_jobs = num_present_prod_jobs - sum(prior_production)
 
             for i, task in enumerate(consume_tasks):
-                # if i == 0:
-                #     model.Add(task.start == prod_jobs[0].tasks[-1].end)
                 suffix = f"_j{task.job_id}_t{task.task_id}"
 
-                prod_window_start_minus_task_start = model.NewIntVar(
-                    -horizon - twelve_hours,
-                    horizon + twelve_hours,
-                    "task_start_minus_other_task_start",
-                )
-                prod_window_start_minus_task_end = model.NewIntVar(
-                    -horizon - twelve_hours,
-                    horizon + twelve_hours,
-                    "task_start_minus_other_task_start",
-                )
-                prod_window_end_minus_task_start = model.NewIntVar(
-                    -horizon - twelve_hours,
-                    horizon + twelve_hours,
-                    "task_start_minus_other_task_start",
-                )
-                prod_window_end_minus_task_end = model.NewIntVar(
-                    -horizon - twelve_hours,
-                    horizon + twelve_hours,
-                    "task_start_minus_other_task_start",
-                )
-
-                model.Add(
-                    prod_window_start_minus_task_start == prod_window_start - task.start
-                )
-                model.Add(
-                    prod_window_start_minus_task_end == prod_window_start - task.end
-                )
-
-                model.Add(
-                    prod_window_end_minus_task_start == prod_window_end - task.start
-                )
-                model.Add(prod_window_end_minus_task_end == prod_window_end - task.end)
-
-                prod_window_start_minus_task_start_gt_0 = model.NewBoolVar(
-                    "task_start_minus_other_start_gt_0" + suffix
-                )
-                model.Add(prod_window_start_minus_task_start >= 0).OnlyEnforceIf(
-                    prod_window_start_minus_task_start_gt_0
-                )
-                model.Add(prod_window_start_minus_task_start < 0).OnlyEnforceIf(
-                    prod_window_start_minus_task_start_gt_0.Not()
-                )
-                prod_window_start_minus_task_end_gt_0 = model.NewBoolVar(
-                    "task_start_minus_other_task_end_gt_0" + suffix
-                )
-                model.Add(prod_window_start_minus_task_end >= 0).OnlyEnforceIf(
-                    prod_window_start_minus_task_end_gt_0
-                )
-                model.Add(prod_window_start_minus_task_end < 0).OnlyEnforceIf(
-                    prod_window_start_minus_task_end_gt_0.Not()
-                )
-                prod_window_end_minus_task_start_gt_0 = model.NewBoolVar(
-                    "task_end_minus_other_task_start_gt_0" + suffix
-                )
-                model.Add(prod_window_end_minus_task_start >= 0).OnlyEnforceIf(
-                    prod_window_end_minus_task_start_gt_0
-                )
-                model.Add(prod_window_end_minus_task_start < 0).OnlyEnforceIf(
-                    prod_window_end_minus_task_start_gt_0.Not()
-                )
-                prod_window_end_minus_task_end_gt_0 = model.NewBoolVar(
-                    "task_end_minus_other_task_end_gt_0" + suffix
-                )
-                model.Add(prod_window_end_minus_task_end >= 0).OnlyEnforceIf(
-                    prod_window_end_minus_task_end_gt_0
-                )
-                model.Add(prod_window_end_minus_task_end < 0).OnlyEnforceIf(
-                    prod_window_end_minus_task_end_gt_0.Not()
-                )
-
                 strictly_before = model.NewBoolVar("strictly_before" + suffix)
-                strictly_after = model.NewBoolVar("strictly_before" + suffix)
-                forward_overlap = model.NewBoolVar("forward_overlap" + suffix)
-                backwards_overlap = model.NewBoolVar("backwards_overlap" + suffix)
-                inner_overlap = model.NewBoolVar("inner_overlap" + suffix)
-                outer_overlap = model.NewBoolVar("outer_overlap" + suffix)
-
+                strictly_after = model.NewBoolVar("strictly_after" + suffix)
+                overlap = model.NewBoolVar("overlap" + suffix)
                 model.Add(
                     sum(
                         [
                             strictly_after,
                             strictly_before,
-                            forward_overlap,
-                            backwards_overlap,
-                            inner_overlap,
-                            outer_overlap,
+                            overlap,
                         ]
                     )
                     == 1
                 ).OnlyEnforceIf(prod_job.is_present)
                 all_strictly_before.append(strictly_before)
 
-                strictly_before_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0,
-                        prod_window_start_minus_task_end_gt_0,
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0,
-                    ]
-                )
-                model.Add(strictly_before_sum == 4).OnlyEnforceIf(strictly_before)
-                model.Add(strictly_before_sum != 4).OnlyEnforceIf(strictly_before.Not())
+                model.Add(task.end < prod_job_end).OnlyEnforceIf(strictly_before)
+                model.Add(task.end>= prod_job_end).OnlyEnforceIf(strictly_before.Not())
 
-                strictly_after_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0.Not(),
-                        prod_window_start_minus_task_end_gt_0.Not(),
-                        prod_window_end_minus_task_start_gt_0.Not(),
-                        prod_window_end_minus_task_end_gt_0.Not(),
-                    ]
-                )
-                model.Add(strictly_after_sum == 4).OnlyEnforceIf(strictly_after)
-                model.Add(strictly_after_sum != 4).OnlyEnforceIf(strictly_after.Not())
+                model.Add(prod_job_end < task.start ).OnlyEnforceIf(strictly_after)
+                model.Add(prod_job_end >= task.start).OnlyEnforceIf(strictly_after.Not())
 
-                forward_overlap_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0,
-                        prod_window_start_minus_task_end_gt_0.Not(),
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0,
-                    ]
-                )
-                model.Add(forward_overlap_sum == 4).OnlyEnforceIf(forward_overlap)
-                model.Add(forward_overlap_sum != 4).OnlyEnforceIf(forward_overlap.Not())
-
-                backwards_overlap_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0.Not(),
-                        prod_window_start_minus_task_end_gt_0.Not(),
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0.Not(),
-                    ]
-                )
-                model.Add(backwards_overlap_sum == 4).OnlyEnforceIf(backwards_overlap)
-                model.Add(backwards_overlap_sum != 4).OnlyEnforceIf(
-                    backwards_overlap.Not()
-                )
-
-                inner_overlap_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0,
-                        prod_window_start_minus_task_end_gt_0.Not(),
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0.Not(),
-                    ]
-                )
-                model.Add(inner_overlap_sum == 4).OnlyEnforceIf(inner_overlap)
-                model.Add(inner_overlap_sum != 4).OnlyEnforceIf(inner_overlap.Not())
-
-                outer_overlap_sum = sum(
-                    [
-                        prod_window_start_minus_task_start_gt_0.Not(),
-                        prod_window_start_minus_task_end_gt_0.Not(),
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0,
-                    ]
-                )
-                model.Add(outer_overlap_sum == 4).OnlyEnforceIf(outer_overlap)
-                model.Add(outer_overlap_sum != 4).OnlyEnforceIf(outer_overlap.Not())
-
-                consumption = model.NewIntVar(0, max_consumption, "consumption")
-                prior_consumption = model.NewIntVar(0, max_consumption, "consumption")
-                future_consumption = model.NewIntVar(0, max_consumption, "consumption")
-
-                # model.Add(consumption == 0).OnlyEnforceIf(prod_job.is_present.Not())
-                # model.Add(prior_consumption == 0).OnlyEnforceIf(
-                #     prod_job.is_present.Not()
-                # )
-                # model.Add(future_consumption == 0).OnlyEnforceIf(
-                #     prod_job.is_present.Not()
-                # )
+                prior_consumption = model.NewIntVar(0, max_consumption, "priorconsumption")
+                future_consumption = model.NewIntVar(0, max_consumption, "futureconsumption")
 
                 # Strictly After
-                model.Add(consumption == 0).OnlyEnforceIf(strictly_after)
                 model.Add(prior_consumption == 0).OnlyEnforceIf(strictly_after)
-                model.Add(future_consumption == task.consumption).OnlyEnforceIf(
-                    strictly_after
-                )
+                model.Add(future_consumption == task.consumption).OnlyEnforceIf(strictly_after)
 
-                # Strictly Before
-                model.Add(consumption == 0).OnlyEnforceIf(strictly_before)
-                model.Add(prior_consumption == task.consumption).OnlyEnforceIf(
-                    strictly_before
-                )
+                # # Strictly Before
+                model.Add(prior_consumption == task.consumption).OnlyEnforceIf(strictly_before)
                 model.Add(future_consumption == 0).OnlyEnforceIf(strictly_before)
 
-                # Forward Overlap
-                model.Add(
-                    consumption
-                    == task.consumption_rate * (task.end - prod_window_start)
-                ).OnlyEnforceIf(forward_overlap)
-                model.Add(
-                    prior_consumption
-                    == task.consumption_rate * (prod_window_start - task.start)
-                ).OnlyEnforceIf(forward_overlap)
-                model.Add(future_consumption == 0).OnlyEnforceIf(forward_overlap)
+                # Overlap
+                model.Add(prior_consumption == task.consumption_rate * (prod_job_end - task.start)).OnlyEnforceIf(overlap)
+                model.Add(future_consumption == task.consumption_rate * (task.end - prod_job_end)).OnlyEnforceIf(overlap)
 
-                # Backwards Overlap
-                model.Add(
-                    consumption
-                    == task.consumption_rate * (prod_window_end - task.start)
-                ).OnlyEnforceIf(backwards_overlap)
-                model.Add(prior_consumption == 0).OnlyEnforceIf(backwards_overlap)
-                model.Add(
-                    future_consumption
-                    == task.consumption_rate * (task.end - prod_window_end)
-                ).OnlyEnforceIf(backwards_overlap)
-
-                # Inner Overlap
-                model.Add(
-                    consumption == task.consumption_rate * 1 #twelve_hours
-                ).OnlyEnforceIf(inner_overlap)
-                model.Add(
-                    prior_consumption
-                    == task.consumption_rate * (prod_window_start - task.start)
-                ).OnlyEnforceIf(inner_overlap)
-                model.Add(
-                    future_consumption
-                    == task.consumption_rate * (task.end - prod_window_end)
-                ).OnlyEnforceIf(inner_overlap)
-
-                # Outer Overlap
-                model.Add(consumption == task.consumption).OnlyEnforceIf(outer_overlap)
-                model.Add(prior_consumption == 0).OnlyEnforceIf(outer_overlap)
-                model.Add(future_consumption == 0).OnlyEnforceIf(outer_overlap)
-
-                current_consumptions.append(consumption)
                 prior_consumptions.append(prior_consumption)
                 future_consumptions.append(future_consumption)
                 job_overlaps.append(
                     [
                         strictly_after,
                         strictly_before,
-                        forward_overlap,
-                        backwards_overlap,
-                        inner_overlap,
-                        outer_overlap,
-                        consumption,
+                        overlap,
                         prior_consumption,
                         future_consumption,
-                    ]
-                )
-                job_tasks_positions.append(
-                    [
-                        prod_window_start_minus_task_start_gt_0,
-                        prod_window_start_minus_task_end_gt_0,
-                        prod_window_end_minus_task_start_gt_0,
-                        prod_window_end_minus_task_end_gt_0,
                     ]
                 )
             overlaps.append(job_overlaps)
             tasks_positions.append(job_tasks_positions)
 
-            prior_state = model.NewIntVar(
-                -lmas_batch * 3,
-                lmas_batch * 3,
-                "prior_state",
-            )
-            model.Add(
-                prior_state
-                == num_prior_jobs * lmas_batch
-                # - sum(prior_expirations)
-                - sum(prior_consumptions)
-            ).OnlyEnforceIf(prod_job.is_present)
+            prior_state = model.NewIntVar(-lmas_batch * 3,lmas_batch * 3,"prior_state")
+            existing_lmas = 0
+            model.Add(prior_state == num_prior_jobs * lmas_batch + existing_lmas - sum(prior_consumptions)).OnlyEnforceIf(prod_job.is_present)
             model.Add(prior_state == 0).OnlyEnforceIf(prod_job.is_present.Not())
             model.Add(prior_state >= 0)
             prior_states.append(prior_state)
-
-            future_state = model.NewIntVar(
-                -lmas_batch * 3, lmas_batch * 3, "prior_state"
-            )
-            model.Add(
-                future_state
-                == (num_subsequent_jobs) * lmas_batch
-                + prior_state
-                # - sum(future_expirations)
-                - sum(future_consumptions)
-                - sum(current_consumptions)
-            ).OnlyEnforceIf(prod_job.is_present)
+            future_state = model.NewIntVar(-lmas_batch * 3, lmas_batch * 3, "future_state")
+            model.Add(future_state == (num_subsequent_jobs) * lmas_batch + prior_state - sum(future_consumptions)).OnlyEnforceIf(prod_job.is_present)
             model.Add(future_state == 0).OnlyEnforceIf(prod_job.is_present.Not())
             model.Add(future_state >= 0)
             future_states.append(future_state)
 
-            # expiration = model.NewIntVar(
-            #     -lmas_batch * 3,
-            #     lmas_batch * 3,
-            #     "expiration",
-            # )
-            consume = model.NewIntVar(0, lmas_batch * 3, "consume")
-            model.Add(consume == sum(current_consumptions)).OnlyEnforceIf(
-                job.is_present
-            )
-            model.Add(consume == 0).OnlyEnforceIf(job.is_present.Not())
-            # expiration_value = expirations[n]
-            # expiration_gt_0 = model.NewBoolVar("expiration_gt_0")
-            # model.Add(expiration == prior_state + lmas_batch - consume).OnlyEnforceIf(
-            #     prod_job.is_present
-            # )
-            # model.Add(expiration == 0).OnlyEnforceIf(prod_job.is_present.Not())
-            # model.Add(expiration > 0).OnlyEnforceIf(expiration_gt_0)
-            # model.Add(expiration_value == expiration).OnlyEnforceIf(expiration_gt_0)
-            # model.Add(expiration <= 0).OnlyEnforceIf(expiration_gt_0.Not())
-            # model.Add(expiration_value == 0).OnlyEnforceIf(expiration_gt_0.Not())
-            # prod_job.tasks[-1].expired = expiration_value
-
-            states.append(prior_state)
-            future_states.append(future_state)
-            # current_states.append(sum(prior_expirations))
-            all_consumptions.append(sum(current_consumptions))
-        # self._expirations = list(
-        #     zip(
-        #         [j.tasks[-1].end for j in prod_jobs],
-        #         expirations,
-        #         states,
-        #         current_states,
-        #         future_states,
-        #         all_consumptions,
-        #     )
-        # )
         self._future_states = future_states
         self._prior_consumptions = all_consumptions
         self._prior_states = prior_states
