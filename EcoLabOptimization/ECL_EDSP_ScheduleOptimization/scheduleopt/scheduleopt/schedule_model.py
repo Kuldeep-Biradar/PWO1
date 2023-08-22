@@ -799,41 +799,41 @@ class ScheduleModel:
                 prior_consumption = model.NewIntVar(
                     0, max_consumption, "priorconsumption"
                 )
-                future_consumption = model.NewIntVar(
-                    0, max_consumption, "futureconsumption"
-                )
+                # future_consumption = model.NewIntVar(
+                #     0, max_consumption, "futureconsumption"
+                # )
 
                 # Strictly After
                 model.Add(prior_consumption == 0).OnlyEnforceIf(strictly_after)
-                model.Add(future_consumption == task.consumption).OnlyEnforceIf(
-                    strictly_after
-                )
+                # model.Add(future_consumption == task.consumption).OnlyEnforceIf(
+                #     strictly_after
+                # )
 
                 # # Strictly Before
                 model.Add(prior_consumption == task.consumption).OnlyEnforceIf(
                     strictly_before
                 )
-                model.Add(future_consumption == 0).OnlyEnforceIf(strictly_before)
+                # model.Add(future_consumption == 0).OnlyEnforceIf(strictly_before)
 
                 # Overlap
                 model.Add(
                     prior_consumption
                     == task.consumption_rate * (prod_job_end - task.start)
                 ).OnlyEnforceIf(overlap)
-                model.Add(
-                    future_consumption
-                    == task.consumption_rate * (task.end - prod_job_end)
-                ).OnlyEnforceIf(overlap)
+                # model.Add(
+                #     future_consumption
+                #     == task.consumption_rate * (task.end - prod_job_end)
+                # ).OnlyEnforceIf(overlap)
 
                 prior_consumptions.append(prior_consumption)
-                future_consumptions.append(future_consumption)
+                # future_consumptions.append(future_consumption)
                 job_overlaps.append(
                     [
                         strictly_after,
                         strictly_before,
                         overlap,
                         prior_consumption,
-                        future_consumption,
+                        # future_consumption,
                     ]
                 )
             overlaps.append(job_overlaps)
@@ -850,13 +850,13 @@ class ScheduleModel:
             model.Add(prior_state == 0).OnlyEnforceIf(prod_job.is_present.Not())
             model.Add(prior_state >= 0)
             prior_states.append(prior_state)
-            future_state = model.NewIntVar(
-                -lmas_batch * 3, lmas_batch * 3, "future_state"
-            )
+            # future_state = model.NewIntVar(
+            #     -lmas_batch * 3, lmas_batch * 3, "future_state"
+            # )
             # model.Add(future_state == (num_subsequent_jobs) * lmas_batch + prior_state - sum(future_consumptions)).OnlyEnforceIf(prod_job.is_present)
             # model.Add(future_state == 0).OnlyEnforceIf(prod_job.is_present.Not())
             # model.Add(future_state >= 0)
-            future_states.append(future_state)
+            # future_states.append(future_state)
 
         self._future_states = future_states
         self._prior_consumptions = all_consumptions
