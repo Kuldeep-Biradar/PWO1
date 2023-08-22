@@ -704,7 +704,8 @@ class ScheduleModel:
 
         full_consumption = sum([task.consumption for task in consume_tasks])
         min_prod_jobs = math.ceil(full_consumption / self._batches.get("LMAS"))
-        max_prod_jobs = math.floor(horizon / prod_jobs[0].tasks[-1].duration_value)
+        # max_prod_jobs = math.floor(horizon / prod_jobs[0].tasks[-1].duration_value)
+        max_prod_jobs = math.ceil(min_prod_jobs * 1.2)
 
         if max_prod_jobs < min_prod_jobs:
             raise ValueError("horizon is too short to produce all required LMAS")
