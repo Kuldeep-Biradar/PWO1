@@ -1271,11 +1271,11 @@ class ScheduleModel:
 
         # for each reactor
         reactor_makespans = []
-        for n in [0, 5, 8]:
-            if n not in intervals_per_resources:
+        for machine_id in [0, 5, 8]:
+            if machine_id not in intervals_per_resources:
                 continue
-            id_tasks = [task.end for task in intervals_per_resources[n].values()]
-            reactor_non_prod = model.NewIntVar(0, horizon, f"reactor_{n}_makespan")
+            id_tasks = [task.end for task in intervals_per_resources[machine_id].values()]
+            reactor_non_prod = model.NewIntVar(0, horizon, f"reactor_{machine_id}_makespan")
             model.AddMaxEquality(reactor_non_prod, id_tasks)
             reactor_makespans.append(reactor_non_prod)
 
