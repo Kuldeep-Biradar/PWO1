@@ -1254,7 +1254,48 @@ class ScheduleModel:
 
         # makespan = model.NewIntVar(0, horizon * 2, "makespan")
         # model.Add(makespan == makespan_prod + makespan_non_prod)
-        model.Minimize(makespan_non_prod)
+        # model.Minimize(makespan_non_prod)
+
+        intervals_per_resources = collections.defaultdict(dict)
+        production_intervals = []
+        for job in jobs:
+            job_id = job.job_id
+            for task in job.tasks:
+                if task.alternates is not None and len(task.alternates) > 0:
+                    for alternate in task.alternates:
+                        intervals_per_resources[alternate.machine_id][
+                            job_id
+                        ] = alternate
+                else:
+                    intervals_per_resources[task.machine_id][job_id] = task
+
+        # for each reactor
+        reactor_makespans = []
+        for n in [0, 5, 8]:
+            if n not in intervals_per_resources:
+                continue
+            id_tasks = [task.end for task in intervals_per_resources[n].values()]
+            reactor_non_prod = model.NewIntVar(0, horizon, f"reactor_{n}_makespan")
+            model.AddMaxEquality(reactor_non_prod, id_tasks)
+            reactor_makespans.append(reactor_non_prod)
+
+        model.Minimize(sum(reactor_makespans))
+
+        # # Makespan objective.
+        # lmas_batch = self._batches.get("LMAS")
+        # # expiration = model.NewIntVar(
+        # #     -len(self._expirations) * lmas_batch,
+        # #     len(self._expirations) * lmas_batch,
+        # #     "expiration",
+        # # )
+        # # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
+        # # makespan_prod = model.NewIntVar(0, horizon, "makespan")
+        # # model.AddMaxEquality(makespan_prod, prod_ends)
+        # non_prod_ends = [
+        #     job.tasks[-1].end for job in jobs if job.tasks[0].min_id != "LMAS"
+        # ]
+        # makespan_non_prod = model.NewIntVar(0, horizon, "makespan")
+        # model.AddMaxEquality(makespan_non_prod, non_prod_ends)
 
         # Creates the solver and solve.
         solver = cp_model.CpSolver()
