@@ -62,7 +62,7 @@ class ScheduleModel:
         cleaning_matrix: Optional[Dict[int, Union[pd.DataFrame, str, Path]]] = None,
         time_scale_factor: int = 2,
         lmas_limit: Optional[int] = None,
-        efficiency: float = 1.0,
+        efficiency: float = 100.0,
     ):
         self._previous_schedule = previous_schedule
         self._schedule_base = schedule_base
@@ -161,7 +161,7 @@ class ScheduleModel:
             files("scheduleopt.data").joinpath("cleaning-times.csv")
         )
         self._changeover_operations = {
-            k: int((v*self.efficiency) / 60 * self._time_scale_factor)
+            k: int((v*((100 - 85)+ 100)/100) / 60 * self._time_scale_factor)
             for k, v in changeover_operations.to_dict("split")["data"]
         }
 
@@ -176,10 +176,10 @@ class ScheduleModel:
         for min_id, job_data in self._jobs.items():
             for task in job_data:
                 for alt_task in task:
-                    alt_task[0] *= (self.efficiency* time_scale_factor)
+                    alt_task[0] *= ((((100 - self.efficiency) + 100 )/100)* time_scale_factor)
                     if len(alt_task) == 5:
                         alt_task[4] = math.ceil(
-                            int(alt_task[4] * 60 / time_scale_factor)
+                            int(alt_task[4]*(self.efficiency/100) * 60 / time_scale_factor)
                         )
                         if alt_task[4] != 0:
                             min_consumption_rate = min(
@@ -1256,48 +1256,7 @@ class ScheduleModel:
 
         # makespan = model.NewIntVar(0, horizon * 2, "makespan")
         # model.Add(makespan == makespan_prod + makespan_non_prod)
-        # model.Minimize(makespan_non_prod)
-
-        intervals_per_resources = collections.defaultdict(dict)
-        production_intervals = []
-        for job in jobs:
-            job_id = job.job_id
-            for task in job.tasks:
-                if task.alternates is not None and len(task.alternates) > 0:
-                    for alternate in task.alternates:
-                        intervals_per_resources[alternate.machine_id][
-                            job_id
-                        ] = alternate
-                else:
-                    intervals_per_resources[task.machine_id][job_id] = task
-
-        # for each reactor
-        reactor_makespans = []
-        for n in [0, 5, 8]:
-            if n not in intervals_per_resources:
-                continue
-            id_tasks = [task.end for task in intervals_per_resources[n].values()]
-            reactor_non_prod = model.NewIntVar(0, horizon, f"reactor_{n}_makespan")
-            model.AddMaxEquality(reactor_non_prod, id_tasks)
-            reactor_makespans.append(reactor_non_prod)
-
-        model.Minimize(sum(reactor_makespans))
-
-        # # Makespan objective.
-        # lmas_batch = self._batches.get("LMAS")
-        # # expiration = model.NewIntVar(
-        # #     -len(self._expirations) * lmas_batch,
-        # #     len(self._expirations) * lmas_batch,
-        # #     "expiration",
-        # # )
-        # # model.Add(expiration == sum([ex[1] for ex in self._expirations]))
-        # # makespan_prod = model.NewIntVar(0, horizon, "makespan")
-        # # model.AddMaxEquality(makespan_prod, prod_ends)
-        # non_prod_ends = [
-        #     job.tasks[-1].end for job in jobs if job.tasks[0].min_id != "LMAS"
-        # ]
-        # makespan_non_prod = model.NewIntVar(0, horizon, "makespan")
-        # model.AddMaxEquality(makespan_non_prod, non_prod_ends)
+        model.Minimize(makespan_non_prod)
 
         # Creates the solver and solve.
         solver = cp_model.CpSolver()
