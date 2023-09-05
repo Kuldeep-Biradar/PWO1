@@ -1257,7 +1257,7 @@ class ScheduleModel:
         # model.Minimize(makespan_non_prod)
 
         intervals_per_resources = collections.defaultdict(dict)
-        production_intervals = []
+        length_per_resources = collections.defaultdict(int)
         for job in jobs:
             job_id = job.job_id
             for task in job.tasks:
@@ -1266,16 +1266,28 @@ class ScheduleModel:
                         intervals_per_resources[alternate.machine_id][
                             job_id
                         ] = alternate
+                        if alternate.duration_value:
+                            length_per_resources[
+                                alternate.machine_id
+                            ] += alternate.duration_value
                 else:
                     intervals_per_resources[task.machine_id][job_id] = task
+                    if task.duration_value:
+                        length_per_resources[task.machine_id] += task.duration_value
 
         # for each reactor
         reactor_makespans = []
         for machine_id in [0, 5, 8]:
             if machine_id not in intervals_per_resources:
                 continue
-            id_tasks = [task.end for task in intervals_per_resources[machine_id].values()]
-            reactor_non_prod = model.NewIntVar(0, horizon, f"reactor_{machine_id}_makespan")
+            id_tasks = [
+                task.end for task in intervals_per_resources[machine_id].values()
+            ]
+            reactor_non_prod = model.NewIntVar(
+                int(math.floor(length_per_resources[machine_id])),
+                horizon,
+                f"reactor_{machine_id}_makespan",
+            )
             model.AddMaxEquality(reactor_non_prod, id_tasks)
             reactor_makespans.append(reactor_non_prod)
 
