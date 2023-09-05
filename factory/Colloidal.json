@@ -1,0 +1,9 @@
+{
+	"name": "Colloidal",
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "5b791fad-2d2f-439f-92bf-0fcfe670e54d",
+		"tenantId": "c1eb5112-7946-4c9d-bc57-40040cfe3a91"
+	}
+}
