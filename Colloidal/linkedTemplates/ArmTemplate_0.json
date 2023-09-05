@@ -48,7 +48,7 @@
 			"properties": {
 				"activities": [
 					{
-						"name": "Notebook1",
+						"name": "Databricks Connection",
 						"type": "DatabricksNotebook",
 						"dependsOn": [],
 						"policy": {
