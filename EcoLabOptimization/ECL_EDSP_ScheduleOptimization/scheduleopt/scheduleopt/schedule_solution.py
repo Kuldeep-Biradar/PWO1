@@ -25,6 +25,7 @@ class ScheduleSolution:
         changeover_operations,
         input_data,
         time_scale_factor,
+        min_consumption_rate,
     ):
         self.machine_names = machine_names
         self.input_data = input_data
@@ -34,6 +35,7 @@ class ScheduleSolution:
         self.jobs = jobs
         self.solver = solver
         self._time_scale_factor = time_scale_factor
+        self._min_consumption_rate = min_consumption_rate
         self._process_solution()
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
             self.machine_stats = self._calculate_machine_stats()
@@ -91,7 +93,11 @@ class ScheduleSolution:
                 if solver.Value(job.is_present) == 0:
                     continue
                 for task in job.tasks:
-                    alt_tasks = [task] if task.alternates is None or len(task.alternates) == 0 else task.alternates
+                    alt_tasks = (
+                        [task]
+                        if task.alternates is None or len(task.alternates) == 0
+                        else task.alternates
+                    )
                     for alt_task in alt_tasks:
                         task_id = alt_task.task_id
 
@@ -232,7 +238,9 @@ class ScheduleSolution:
         schedule = self._job_schedule.copy()
         schedule["Start"] /= self._time_scale_factor
         schedule["End"] /= self._time_scale_factor
-        schedule["ConsumptionRate"] *= self._time_scale_factor / 60
+        schedule["ConsumptionRate"] *= (
+            self._min_consumption_rate * self._time_scale_factor / 60
+        )
         return schedule
 
     def _create_time_series(self):

@@ -196,6 +196,9 @@ class ScheduleModel:
         if min_consumption_rate == float("inf"):
             min_consumption_rate = 1
 
+        min_consumption_rate = 1
+        self._min_consumption_rate = min_consumption_rate
+
         self._batches["LMAS"] = math.floor(self._batches["LMAS"] / min_consumption_rate)
 
         for min_id, job_data in self._jobs.items():
@@ -308,7 +311,9 @@ class ScheduleModel:
 
         # Track last min job for job hierarchy
         last_min_jobs = collections.defaultdict(lambda: None)
-
+        required_lmas = 0
+        lmas_batches = []
+        LMAS_batch_size = self._batches.get("LMAS")
         job_id = job_id_min
         last_consumed = 0
         total_leftover = 0
@@ -319,6 +324,9 @@ class ScheduleModel:
                 task_intervals = []
                 job_is_present = model.NewBoolVar(f"job_is_present_j{job_id}")
                 model.Add(job_is_present == 1)
+                min_id = df.iloc[0]["MIN"]
+                if min_id == "LMAS":
+                    continue
                 for n, row in df.iterrows():
                     try:
                         task_id = int(row["TaskId"])
@@ -356,19 +364,22 @@ class ScheduleModel:
                         #     # if current_leftover > consumption, no consumption needed
                         #     production_batch_size = self._batches.get(k)
                         task_consume_total = task_consume_rate * duration
-                    #     job_consume_total += task_consume_total
-                    #     job_id += 1
+                        job_consume_total += task_consume_total
+                        #     job_id += 1
 
-                    #     # task will require one or more consume product production job
-                    #     production_total_batches = math.ceil(
-                    #         (task_consume_total) / production_batch_size
-                    #     )
+                        #     # task will require one or more consume product production job
+                        production_total_batches = math.ceil(
+                            (task_consume_total) / LMAS_batch_size
+                        )
+                        lmas_batches.append(production_total_batches)
                     #     production_jobs_data = [
                     #         self._jobs.get(k)
                     #     ] * production_total_batches
                     #     production_jobs = self._create_job_intervals(
                     #         model, production_jobs_data, horizon, job_id
                     #     )
+                    # task will require one or more consume product production job
+
                     #     # set outer job id
                     #     job_id = production_jobs[-1].job_id
 
@@ -389,11 +400,14 @@ class ScheduleModel:
                     last_consumed=last_consumed,
                     total_consumed=math.ceil(job_consume_total),
                 )
-                if min_id == "LMAS":
-                    production_jobs.append(job)
-                else:
-                    jobs.append(job)
+                required_lmas += job_consume_total
+                # if min_id == "LMAS":
+                #     production_jobs.append(job)
+                # else:
+                jobs.append(job)
                 job_id += 1
+                # if n > 5:
+                #     break
 
         production_jobs_runtime = 0
         production_batch_time = sum([task[0][0] for task in self._jobs.get("LMAS")])
@@ -401,8 +415,6 @@ class ScheduleModel:
         reactor_ids = [0, 5, 8]
         uf_ids = [1, 6, 7]
 
-        required_lmas = 0
-        lmas_batches = []
         for job in jobs_data:
             # LMAS Collections
             current_leftover = 0  # Currently available LMAS
@@ -704,8 +716,10 @@ class ScheduleModel:
 
         full_consumption = sum([task.consumption for task in consume_tasks])
         min_prod_jobs = math.ceil(full_consumption / self._batches.get("LMAS"))
-        # max_prod_jobs = math.floor(horizon / prod_jobs[0].tasks[-1].duration_value)
-        max_prod_jobs = math.ceil(min_prod_jobs * 1.2)
+        max_prod_jobs = min(
+            math.floor(horizon / prod_jobs[0].tasks[-1].duration_value),
+            math.ceil(min_prod_jobs * 1.2),
+        )
 
         if max_prod_jobs < min_prod_jobs:
             raise ValueError("horizon is too short to produce all required LMAS")
@@ -1337,6 +1351,7 @@ class ScheduleModel:
             deepcopy(self._changeover_operations),
             deepcopy(self._input_data),
             self._time_scale_factor,
+            self._min_consumption_rate,
         )
 
     def solve_minimize_delivery_miss(self, max_time_in_seconds=None, verbose=False):
