@@ -62,10 +62,12 @@ class ScheduleModel:
         cleaning_matrix: Optional[Dict[int, Union[pd.DataFrame, str, Path]]] = None,
         time_scale_factor: int = 2,
         lmas_limit: Optional[int] = None,
+        efficiency: float = 100.0,
     ):
         self._previous_schedule = previous_schedule
         self._schedule_base = schedule_base
         self._time_scale_factor = time_scale_factor
+        self.efficiency = efficiency
         self._process_cleaning_matrix(cleaning_matrix)
         self._load_input_data(input_data)
         self._initialize_inputs()
@@ -159,7 +161,7 @@ class ScheduleModel:
             files("scheduleopt.data").joinpath("cleaning-times.csv")
         )
         self._changeover_operations = {
-            k: int(v / 60 * self._time_scale_factor)
+            k: int((v*((100 - 85)+ 100)/100) / 60 * self._time_scale_factor)  #85% efficiency for changeover tasks
             for k, v in changeover_operations.to_dict("split")["data"]
         }
 
@@ -174,10 +176,10 @@ class ScheduleModel:
         for min_id, job_data in self._jobs.items():
             for task in job_data:
                 for alt_task in task:
-                    alt_task[0] *= time_scale_factor
+                    alt_task[0] *= ((((100 - self.efficiency) + 100 )/100)* time_scale_factor)
                     if len(alt_task) == 5:
                         alt_task[4] = math.ceil(
-                            int(alt_task[4] * 60 / time_scale_factor)
+                            int(alt_task[4]*(self.efficiency/100) * 60 / time_scale_factor)
                         )
                         if alt_task[4] != 0:
                             min_consumption_rate = min(
