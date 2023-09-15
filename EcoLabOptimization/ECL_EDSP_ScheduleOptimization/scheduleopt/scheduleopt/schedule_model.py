@@ -1210,6 +1210,7 @@ class ScheduleModel:
         max_time_in_seconds=45,
         number_of_search_workers=8,
         max_horizon=None,
+        max_bound=None,
         verbose=False,
     ):
         """Minimal jobshop problem."""
