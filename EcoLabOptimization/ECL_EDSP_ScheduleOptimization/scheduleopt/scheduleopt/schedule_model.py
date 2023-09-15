@@ -1293,6 +1293,7 @@ class ScheduleModel:
                         length_per_resources[task.machine_id] += task.duration_value
 
         # for each reactor
+        reactors_min_bound = 0
         reactor_makespans = []
         for machine_id in [0, 5, 8]:
             if machine_id not in intervals_per_resources:
@@ -1300,15 +1301,24 @@ class ScheduleModel:
             id_tasks = [
                 task.end for task in intervals_per_resources[machine_id].values()
             ]
+            reactor_min_bound = int(math.floor(length_per_resources[machine_id]))
             reactor_non_prod = model.NewIntVar(
-                int(math.floor(length_per_resources[machine_id])),
+                reactor_min_bound,
                 horizon,
                 f"reactor_{machine_id}_makespan",
             )
             model.AddMaxEquality(reactor_non_prod, id_tasks)
             reactor_makespans.append(reactor_non_prod)
+            reactors_min_bound += reactor_min_bound
 
-        model.Minimize(sum(reactor_makespans))
+        reactor_sum = model.NewIntVar(
+            reactors_min_bound,
+            max_bound if max_bound is not None else horizon * 3,
+            "Reactor_Makespan_Sum"
+        )
+        model.Add(reactor_sum == sum(reactor_makespans))
+
+        model.Minimize(reactor_sum)
 
         # # Makespan objective.
         # lmas_batch = self._batches.get("LMAS")
