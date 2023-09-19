@@ -198,7 +198,7 @@ class ScheduleModel:
         if min_consumption_rate == float("inf"):
             min_consumption_rate = 1
 
-        min_consumption_rate = 1
+        # min_consumption_rate = 1
         self._min_consumption_rate = min_consumption_rate
 
         self._batches["LMAS"] = math.floor(self._batches["LMAS"] / min_consumption_rate)
@@ -1313,7 +1313,7 @@ class ScheduleModel:
 
         reactor_sum = model.NewIntVar(
             reactors_min_bound,
-            max_bound if max_bound is not None else horizon * 3,
+            int(max_bound) if max_bound is not None else horizon * 3,
             "Reactor_Makespan_Sum"
         )
         model.Add(reactor_sum == sum(reactor_makespans))
