@@ -198,7 +198,7 @@ class ScheduleModel:
         if min_consumption_rate == float("inf"):
             min_consumption_rate = 1
 
-        # min_consumption_rate = 1
+        min_consumption_rate = 1
         self._min_consumption_rate = min_consumption_rate
 
         self._batches["LMAS"] = math.floor(self._batches["LMAS"] / min_consumption_rate)
