@@ -162,7 +162,7 @@ class ScheduleModel:
         )
         self._changeover_operations = {
             #k: int((v*((100 - 85)+ 100)/100) / 60 * self._time_scale_factor)  #85% efficiency for changeover tasks
-            k: int((v*100/85)) / 60 * self._time_scale_factor)  #85% efficiency for changeover tasks
+            k: int(((v*100/85)) / 60 * self._time_scale_factor)  #85% efficiency for changeover tasks
             for k, v in changeover_operations.to_dict("split")["data"]
         }
 
