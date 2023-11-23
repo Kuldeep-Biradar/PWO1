@@ -627,6 +627,7 @@ class ScheduleModel:
 
         lmas_batches = sum(lmas_batches)
         k = 'LMAS'
+        production_batch_size = self._batches.get(k)
         if lmas_batches > 0:
             production_jobs_data = [self._jobs.get(k)] * lmas_batches
 
